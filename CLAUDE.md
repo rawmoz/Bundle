@@ -35,6 +35,12 @@ Think of it as a physical desk — a neutral staging area with no permanence imp
 - **Spacebar mid-drag** opens the shelf
 - **Global hotkey** (TBD) opens/closes the shelf anytime
 
+## Current state
+Xcode project scaffolded and builds clean. No functional code yet. Structure:
+- `Bundle.xcodeproj` — Xcode project config
+- `Bundle/BundleApp.swift` — app entry point
+- `Bundle/ContentView.swift` — main UI (currently blank default)
+
 ## Roadmap
 - [ ] v0.1 — Shelf window appears/hides with a global hotkey
 - [ ] v0.2 — Detect spacebar mid-drag to trigger the shelf
