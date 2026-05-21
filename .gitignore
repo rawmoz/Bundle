@@ -1,0 +1,16 @@
+# Xcode build output
+build/
+DerivedData/
+*.pbxuser
+*.mode1v3
+*.mode2v3
+*.perspectivev3
+*.xcuserstate
+xcuserdata/
+
+# Xcode auto-generated
+*.xcodeproj/project.xcworkspace
+*.xcodeproj/xcuserdata
+
+# macOS junk
+.DS_Store

@@ -48,7 +48,7 @@ https://github.com/rawmoz/Bundle
 Local: /Users/danielramos/dev/Bundle
 
 ## Working style
-- User is a vibe coder — AI writes all the code, user runs it in Xcode and reports back
+- User wants to vibe code — AI writes all the code, user runs it in Xcode and reports back
 - Keep files small and focused, one feature per file where possible
 - User pastes errors from Xcode, Claude fixes them
 - Update this file at the end of each session
