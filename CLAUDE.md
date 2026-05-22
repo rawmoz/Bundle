@@ -6,19 +6,29 @@ A macOS utility that gives users a temporary shelf for files mid-workflow. The u
 Think of it as a physical desk — a neutral staging area with no permanence implied. Not a folder, not a clipboard.
 
 ## Core interaction
-1. User starts dragging a file or folder
-2. Hits spacebar mid-drag → shelf slides in from the left edge of the screen
+
+There are two distinct triggers — they serve different moments and must never be confused:
+
+**Trigger 1 — Spacebar mid-drag (putting a file in):**
+1. User starts dragging a file or folder in Finder (or any app)
+2. Hits spacebar WHILE the drag is active → shelf appears
 3. User drops file into one of the circular slots
-4. Shelf minimizes out of the way
-5. Global hotkey anytime → shelf reopens
+4. Shelf hides
+
+**Trigger 2 — Global hotkey (getting a file back out):**
+5. At any later time, user hits the global hotkey (TBD) → shelf opens
 6. User drags file back out (behaves exactly like a normal system drag)
+7. Shelf hides
+
+Spacebar only works when macOS is in an active drag state. It does NOT trigger on hover, click, keyboard focus, or any other state. The global hotkey works regardless of drag state.
 
 ## Visual design
-- **Panel** — frosted glass (SwiftUI material), anchored to the left edge of the screen
+- **Panel** — frosted glass (SwiftUI material), floats anywhere on screen (not edge-anchored)
+- **Panel position** — draggable by the user. Position persists via UserDefaults and is restored on next launch. Default starting position is left-center of the screen, but never hard-coded.
 - **Slots** — 7 circular slots stacked vertically. Always visible. Empty slots show as faint empty circles.
 - **File icon** — uses macOS native file icon via NSWorkspace (one line, auto-detects file type, shows real icon)
 - **Minus button** — appears on each occupied slot, clears that file from the shelf (does NOT delete the file)
-- **Future** — horizontal orientation toggle, customizable slot count, customizable edge (left/right). Build slots as a grid component so orientation is just a variable, not a rewrite.
+- **Future** — horizontal orientation toggle, customizable slot count. Build slots as a grid component so orientation is just a variable, not a rewrite.
 
 ## Tech stack
 - **Swift** — language
@@ -37,14 +47,17 @@ Think of it as a physical desk — a neutral staging area with no permanence imp
 - **React Native / Tauri** — unnecessary complexity, wrong tool for native Mac utility.
 - **Hard-coded slot count** — 7 is the default but must be a variable from day one. Future setting.
 - **Custom file type detector** — unnecessary, macOS gives real file icons for free via NSWorkspace.
+- **Fixed edge anchoring** — ruled out in favor of a freely draggable panel with persistent position. Users know where they want things on their own screen.
 
 ## UX decisions
-- Shelf anchored to **left edge of screen**
+- Shelf floats **anywhere on screen** — position set by the user, not hard-coded
+- Panel is **draggable** — user drags the panel itself to reposition it; position saved to UserDefaults immediately on move
 - **7 circular slots** stacked vertically (not hard-coded, variable)
-- Does **not** persist after restart — shelf clears on quit
+- Does **not** persist after restart — shelf clears on quit (position persists, file contents do not)
 - Dragging a file out behaves like a **normal system drag**
-- **Spacebar mid-drag** triggers the shelf
-- **Global hotkey** (TBD) opens/closes the shelf anytime
+- **Two distinct triggers** — see Core Interaction above. These are separate mechanisms, not interchangeable.
+- **Spacebar mid-drag** — puts a file in. Only fires when macOS is in an active drag state. Never fires on hover, click, or focus.
+- **Global hotkey (TBD)** — retrieves a file. Opens the shelf at any time so the user can drag their file back out.
 - Minus button **clears slot only**, never deletes the actual file
 
 ## Current state
