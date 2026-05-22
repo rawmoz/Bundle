@@ -12,5 +12,8 @@ xcuserdata/
 *.xcodeproj/project.xcworkspace
 *.xcodeproj/xcuserdata
 
+# Swift Package Manager
+.swiftpm/
+
 # macOS junk
 .DS_Store
