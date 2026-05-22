@@ -61,13 +61,18 @@ Spacebar only works when macOS is in an active drag state. It does NOT trigger o
 - Minus button **clears slot only**, never deletes the actual file
 
 ## Current state
-Xcode project scaffolded and builds clean. No functional code yet. Structure:
+v0.1 complete. Shelf panel appears and hides with ⌘⌥B. Position persists via UserDefaults. Structure:
 - `Bundle.xcodeproj` — Xcode project config
-- `Bundle/BundleApp.swift` — app entry point
-- `Bundle/ContentView.swift` — main UI (currently blank default)
+- `Bundle/BundleApp.swift` — app entry point, delegates to AppDelegate
+- `Bundle/AppDelegate.swift` — wires ShelfWindowController + HotkeyManager on launch
+- `Bundle/ShelfConfig.swift` — config constants (slotCount, sizes) + position persistence
+- `Bundle/ShelfWindowController.swift` — owns the NSPanel (show/hide/drag/position save)
+- `Bundle/ShelfView.swift` — SwiftUI placeholder UI (7 empty circles, frosted panel)
+- `Bundle/HotkeyManager.swift` — Carbon RegisterEventHotKey, fires ⌘⌥B
+- `Bundle/DragMonitor.swift` — stub for v0.2
 
 ## Roadmap
-- [ ] v0.1 — Shelf appears and hides with a global hotkey
+- [x] v0.1 — Shelf appears and hides with a global hotkey (⌘⌥B)
 - [ ] v0.2 — Detect spacebar mid-drag to trigger the shelf
 - [ ] v0.3 — Drop files in, drag files out, file icons displayed
 - [ ] v0.4 — Minus button clears a slot

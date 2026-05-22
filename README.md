@@ -27,7 +27,7 @@ File contents don't persist between sessions. Panel position does.
 
 ## Roadmap
 
-- [ ] v0.1 — Shelf appears and hides with a global hotkey
+- [x] v0.1 — Shelf appears and hides with a global hotkey (⌘⌥B)
 - [ ] v0.2 — Detect spacebar mid-drag to trigger the shelf
 - [ ] v0.3 — Drop files in, drag files out, file icons displayed
 - [ ] v0.4 — Minus button clears a slot
