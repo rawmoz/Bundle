@@ -48,6 +48,7 @@ Spacebar only works when macOS is in an active drag state. It does NOT trigger o
 - **Hard-coded slot count** — 7 is the default but must be a variable from day one. Future setting.
 - **Custom file type detector** — unnecessary, macOS gives real file icons for free via NSWorkspace.
 - **Fixed edge anchoring** — ruled out in favor of a freely draggable panel with persistent position. Users know where they want things on their own screen.
+- **CGEventTap for spacebar-mid-drag detection (v0.2)** — investigated exhaustively on macOS Sequoia. Two compounding problems: (1) pressing spacebar during a file drag triggers macOS "Show Desktop" at the window server level, which cannot be intercepted or swallowed via any CGEventTap location (cgSessionEventTap or cgHIDEventTap); (2) even with Accessibility permission granted and tap creation confirmed, the listen-only tap callback does not fire for events originating in other apps (Finder). This appears to be a Sequoia-era tightening of event tap access. v0.2 is parked until a viable approach is found.
 
 ## UX decisions
 - Shelf floats **anywhere on screen** — position set by the user, not hard-coded
@@ -73,7 +74,7 @@ v0.1 complete. Shelf panel appears and hides with ⌘⌥B. Position persists via
 
 ## Roadmap
 - [x] v0.1 — Shelf appears and hides with a global hotkey (⌘⌥B)
-- [ ] v0.2 — Detect spacebar mid-drag to trigger the shelf
+- [~] v0.2 — Detect spacebar mid-drag to trigger the shelf (parked — see "What was ruled out")
 - [ ] v0.3 — Drop files in, drag files out, file icons displayed
 - [ ] v0.4 — Minus button clears a slot
 - [ ] v0.5 — Frosted glass UI, circular slots, left edge anchoring
