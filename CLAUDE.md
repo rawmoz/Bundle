@@ -58,26 +58,44 @@ Spacebar only works when macOS is in an active drag state. It does NOT trigger o
 - Dragging a file out behaves like a **normal system drag**
 - **Two distinct triggers** — see Core Interaction above. These are separate mechanisms, not interchangeable.
 - **Spacebar mid-drag** — puts a file in. Only fires when macOS is in an active drag state. Never fires on hover, click, or focus.
-- **Global hotkey (TBD)** — retrieves a file. Opens the shelf at any time so the user can drag their file back out.
+- **Global hotkey ⌘⌥B** — retrieves a file. Opens the shelf at any time so the user can drag their file back out.
 - Minus button **clears slot only**, never deletes the actual file
+- **Panel drag vs file drag conflict** — `isMovableByWindowBackground` captures all mouse drags before SwiftUI's `.onDrag` can fire. Solution: `isMovableByWindowBackground = false`, plus a dedicated `PanelDragHandle` (NSViewRepresentable) at the top of the panel that calls `window?.performDrag(with:)`. Only the handle moves the panel; slots own their own drag events.
+
+## File storage strategy (decided in v0.3)
+Using **move model**: files are physically moved into `~/Library/Application Support/Bundle/shelf/{uuid}/{filename}` on drop. Original location is recorded in a `manifest.json`. Shelf state persists across app launches.
+
+**Slot action button:**
+- Default hover: `arrow.uturn.left` — moves file back to original location (falls back to Downloads if origin no longer exists)
+- Command held while shelf is open: all occupied slots show `trash.fill` in red — sends file to Trash via NSWorkspace.recycle
+
+**Drag-out:** uses AppKit `NSDraggingSource` (not SwiftUI `.onDrag`) so we get `draggingSession(_:endedAt:operation:)` callback. Slot is only cleared on confirmed non-cancel operation.
+
+**To swap back to reference model**: only `ShelfStore.swift` — replace `drop(url:into:)` and `storageURL(at:)`. Nothing else in the app holds URLs directly.
+
+**Naming conflicts**: each file lives in its own UUID subfolder so two `report.pdf` files never collide.
+
+**Sandbox note**: if the app is ever sandboxed (App Store), raw path strings won't survive security checks — will need security-scoped bookmarks in the manifest instead.
 
 ## Current state
-v0.1 complete. Shelf panel appears and hides with ⌘⌥B. Position persists via UserDefaults. Structure:
+v0.3 complete. Full file lifecycle working: drop in, drag out, return to origin, trash. Structure:
 - `Bundle.xcodeproj` — Xcode project config
 - `Bundle/BundleApp.swift` — app entry point, delegates to AppDelegate
 - `Bundle/AppDelegate.swift` — wires ShelfWindowController + HotkeyManager on launch
-- `Bundle/ShelfConfig.swift` — config constants (slotCount, sizes) + position persistence
+- `Bundle/ShelfConfig.swift` — config constants (slotCount, sizes, dragHandleHeight) + position persistence
 - `Bundle/ShelfWindowController.swift` — owns the NSPanel (show/hide/drag/position save)
-- `Bundle/ShelfView.swift` — SwiftUI placeholder UI (7 empty circles, frosted panel)
+- `Bundle/ShelfView.swift` — SwiftUI slot UI; drop-in, icon display, return/trash button, Command key monitor, drag handle
+- `Bundle/ShelfStore.swift` — owns slot state ([ShelfEntry?]); file move/return/trash/persistence; single place to swap storage strategy
+- `Bundle/FileDragSource.swift` — AppKit NSDraggingSource + NSFilePromiseProvider for drag-out (required to avoid Finder error -8058 from ~/Library/Application Support/)
 - `Bundle/HotkeyManager.swift` — Carbon RegisterEventHotKey, fires ⌘⌥B
 - `Bundle/DragMonitor.swift` — stub for v0.2
 
 ## Roadmap
 - [x] v0.1 — Shelf appears and hides with a global hotkey (⌘⌥B)
 - [~] v0.2 — Detect spacebar mid-drag to trigger the shelf (parked — see "What was ruled out")
-- [ ] v0.3 — Drop files in, drag files out, file icons displayed
-- [ ] v0.4 — Minus button clears a slot
-- [ ] v0.5 — Frosted glass UI, circular slots, left edge anchoring
+- [x] v0.3 — Drop files in, drag files out, file icons, return-to-origin button, command+trash, persistent storage, drag handle. Minus button (originally v0.4) pulled forward.
+- [ ] v0.4 — (open — reassign or skip)
+- [ ] v0.5 — Frosted glass UI, circular slots, draggable panel with persistent position
 - [ ] v0.6 — Polish and animations
 
 ## Repo

@@ -6,11 +6,13 @@ enum ShelfConfig {
     static let slotSpacing: CGFloat = 12
     static let padding: CGFloat = 16
     static let cornerRadius: CGFloat = 20
+    static let dragHandleHeight: CGFloat = 24
 
     static var panelSize: CGSize {
         let height = CGFloat(slotCount) * slotSize
                    + CGFloat(slotCount - 1) * slotSpacing
                    + padding * 2
+                   + dragHandleHeight
         let width = slotSize + padding * 2
         return CGSize(width: width, height: height)
     }

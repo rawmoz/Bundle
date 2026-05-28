@@ -17,7 +17,7 @@ final class ShelfWindowController: NSObject, NSWindowDelegate {
         super.init()
 
         panel.level = .floating
-        panel.isMovableByWindowBackground = true
+        panel.isMovableByWindowBackground = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.isOpaque = false
         panel.backgroundColor = .clear
