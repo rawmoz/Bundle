@@ -31,7 +31,7 @@ Seven circular slots stacked vertically. Drop a file in and its real macOS icon 
 - [x] v0.1 — Shelf appears and hides with a global hotkey (⌘⌥B)
 - [~] v0.2 — Detect spacebar mid-drag to trigger the shelf (parked — macOS Sequoia limitation)
 - [x] v0.3 — Drop files in, drag files out, file icons, return-to-origin, persistent storage
-- [ ] v0.4 — TBD
+- [ ] v0.4 — Click to select, multi-select (⌘+click), batch return/trash, multi-file drag, double-click to open
 - [ ] v0.5 — Polish and animations
 
 ## Built with

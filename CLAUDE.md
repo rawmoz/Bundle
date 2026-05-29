@@ -52,22 +52,22 @@ Spacebar only works when macOS is in an active drag state. It does NOT trigger o
 
 ## UX decisions
 - Shelf floats **anywhere on screen** — position set by the user, not hard-coded
-- Panel is **draggable** — user drags the panel itself to reposition it; position saved to UserDefaults immediately on move
+- Panel is **draggable via grip handle** — top of the panel has a dedicated drag handle (3-dot grip). `isMovableByWindowBackground = false` so slot drags don't move the window.
 - **7 circular slots** stacked vertically (not hard-coded, variable)
-- Does **not** persist after restart — shelf clears on quit (position persists, file contents do not)
-- Dragging a file out behaves like a **normal system drag**
+- **Persists across launches** — files stay in storage, slot state saved to manifest.json on every change
+- Dragging a file out behaves like a **normal system drag** (NSFilePromiseProvider)
 - **Two distinct triggers** — see Core Interaction above. These are separate mechanisms, not interchangeable.
 - **Spacebar mid-drag** — puts a file in. Only fires when macOS is in an active drag state. Never fires on hover, click, or focus.
-- **Global hotkey ⌘⌥B** — retrieves a file. Opens the shelf at any time so the user can drag their file back out.
-- Minus button **clears slot only**, never deletes the actual file
-- **Panel drag vs file drag conflict** — `isMovableByWindowBackground` captures all mouse drags before SwiftUI's `.onDrag` can fire. Solution: `isMovableByWindowBackground = false`, plus a dedicated `PanelDragHandle` (NSViewRepresentable) at the top of the panel that calls `window?.performDrag(with:)`. Only the handle moves the panel; slots own their own drag events.
+- **Global hotkey ⌘⌥B** — opens/closes the shelf at any time
+- **Slot interaction model (v0.3):** hover does nothing. Return button (↩) appears on hover and operates on that slot only. Option held → trash icon. This will be replaced in v0.4 with a click-to-select model — see v0.4 spec below.
 
 ## File storage strategy (decided in v0.3)
 Using **move model**: files are physically moved into `~/Library/Application Support/Bundle/shelf/{uuid}/{filename}` on drop. Original location is recorded in a `manifest.json`. Shelf state persists across app launches.
 
-**Slot action button:**
-- Default hover: `arrow.uturn.left` — moves file back to original location (falls back to Downloads if origin no longer exists)
-- Command held while shelf is open: all occupied slots show `trash.fill` in red — sends file to Trash via NSWorkspace.recycle
+**Slot action button (v0.3 — will change in v0.4):**
+- Hover: `arrow.uturn.left` — moves file back to original location (falls back to Downloads if origin no longer exists)
+- Command held: all occupied slots show `trash.fill` in red — sends file to Trash via NSWorkspace.recycle
+- Note: in v0.4, Command is reassigned to multi-select. Trash mode moves to Option key.
 
 **Drag-out:** uses AppKit `NSDraggingSource` (not SwiftUI `.onDrag`) so we get `draggingSession(_:endedAt:operation:)` callback. Slot is only cleared on confirmed non-cancel operation.
 
@@ -90,13 +90,48 @@ v0.3 complete. Full file lifecycle working: drop in, drag out, return to origin,
 - `Bundle/HotkeyManager.swift` — Carbon RegisterEventHotKey, fires ⌘⌥B
 - `Bundle/DragMonitor.swift` — stub for v0.2
 
+## v0.4 spec — Selection, multi-select, batch operations, double-click to open
+
+### Interaction model
+- **Hover** — does nothing. No button, no highlight. Exactly like files on the desktop.
+- **Single click** — selects that slot. Deselects all others. Blue ring + subtle darker blue fill appears inside the circle.
+- **Command + click** — adds or removes that slot from the selection (multi-select). Other selections are preserved.
+- **Click empty slot or empty area** — deselects everything.
+- **Selection resets when panel closes** — not persisted. Simple, no stale state on reopen.
+
+### Visual: selected state
+- Outer ring: system blue (full opacity, replaces the white stroke)
+- Circle fill: darker blue at low opacity (e.g. blue.opacity(0.2)) — just enough to distinguish from empty
+- Return button (↩) appears on selected slots, not on hover
+- Selection is the trigger for button visibility — hover is irrelevant
+
+### Modifier key reassignment
+- **Option held** → trash mode (was Command in v0.3). All occupied slots show red trash icon.
+- **Command** → exclusively for multi-select click behavior. No longer triggers trash.
+- This is a one-line change in the event monitor (`.option` instead of `.command`).
+
+### Batch operations
+- Return button on any selected slot → returns ALL selected files to their origins simultaneously
+- Option held → red trash icon on all selected slots → clicking one trashes ALL selected
+- Operations always act on the full selection, not just the slot being clicked
+
+### Multi-drag
+- Dragging from a selected slot → all selected files drag out together as a group (multiple NSDraggingItems in one session — AppKit supports this natively)
+- Dragging from an unselected slot → drags just that one file (selection untouched)
+- Each file in a multi-drag uses its own NSFilePromiseProvider
+
+### Double-click to open
+- Double-click a slot → opens the file with its default app via NSWorkspace.open()
+- If slots are selected and you double-click one of them → opens ALL selected files (matches native macOS Finder behavior)
+- If you double-click a slot that is NOT selected → opens just that file, selection unchanged
+- Folders open in Finder; all other file types open in their default app
+
 ## Roadmap
 - [x] v0.1 — Shelf appears and hides with a global hotkey (⌘⌥B)
 - [~] v0.2 — Detect spacebar mid-drag to trigger the shelf (parked — see "What was ruled out")
-- [x] v0.3 — Drop files in, drag files out, file icons, return-to-origin button, command+trash, persistent storage, drag handle. Minus button (originally v0.4) pulled forward.
-- [ ] v0.4 — (open — reassign or skip)
-- [ ] v0.5 — Frosted glass UI, circular slots, draggable panel with persistent position
-- [ ] v0.6 — Polish and animations
+- [x] v0.3 — Drop files in, drag files out, file icons, return-to-origin, command+trash, persistent storage, drag handle
+- [ ] v0.4 — Selection model, multi-select, batch operations, multi-drag, double-click to open (see v0.4 spec above)
+- [ ] v0.5 — Polish and animations
 
 ## Repo
 https://github.com/rawmoz/Bundle
