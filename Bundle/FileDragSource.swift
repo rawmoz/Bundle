@@ -9,52 +9,77 @@ import UniformTypeIdentifiers
 // because Finder can't directly access that path from another process. With NSFilePromiseProvider,
 // our app (which has full access to its own storage) copies the file to the system-provided
 // destination URL — Finder never touches the source path directly.
-//
-// Completion flow: onDragComplete fires inside writePromiseTo after the copy succeeds,
-// not at drag session end. This ensures storage is only cleared after the file is safe
-// at its destination.
+
+struct DragItem {
+    let url: URL
+    let icon: NSImage?
+    let onComplete: () -> Void
+}
 
 struct FileDragSource: NSViewRepresentable {
-    let url: URL
-    let icon: NSImage
-    let onComplete: () -> Void
+    let items: [DragItem]
+    let onSingleClick: () -> Void
+    let onDoubleClick: () -> Void
 
     func makeNSView(context: Context) -> FileDragSourceView {
         FileDragSourceView()
     }
 
     func updateNSView(_ nsView: FileDragSourceView, context: Context) {
-        nsView.fileURL = url
-        nsView.dragIcon = icon
-        nsView.onDragComplete = onComplete
+        nsView.dragItems = items
+        nsView.onSingleClick = onSingleClick
+        nsView.onDoubleClick = onDoubleClick
     }
 }
 
 final class FileDragSourceView: NSView, NSDraggingSource, NSFilePromiseProviderDelegate {
-    var fileURL: URL?
-    var dragIcon: NSImage?
-    var onDragComplete: (() -> Void)?
+    var dragItems: [DragItem] = []
+    var onSingleClick: (() -> Void)?
+    var onDoubleClick: (() -> Void)?
 
     private var mouseDownEvent: NSEvent?
+    private var didDrag = false
+    private var providerCompletions: [ObjectIdentifier: () -> Void] = [:]
 
     override func mouseDown(with event: NSEvent) {
         mouseDownEvent = event
+        didDrag = false
     }
 
     override func mouseDragged(with event: NSEvent) {
-        guard let url = fileURL, let mouseDown = mouseDownEvent else { return }
+        guard !didDrag, let mouseDown = mouseDownEvent, !dragItems.isEmpty else { return }
+        let dx = event.locationInWindow.x - mouseDown.locationInWindow.x
+        let dy = event.locationInWindow.y - mouseDown.locationInWindow.y
+        guard dx * dx + dy * dy > 25 else { return } // 5pt threshold
+        didDrag = true
 
-        let fileType = UTType(filenameExtension: url.pathExtension)?.identifier ?? UTType.item.identifier
-        let provider = NSFilePromiseProvider(fileType: fileType, delegate: self)
-        provider.userInfo = url as NSURL
+        providerCompletions.removeAll()
+        var nsDraggingItems: [NSDraggingItem] = []
 
-        let icon = dragIcon ?? NSWorkspace.shared.icon(forFile: url.path)
-        let item = NSDraggingItem(pasteboardWriter: provider)
-        let size = CGSize(width: 36, height: 36)
-        let origin = CGPoint(x: (bounds.width - size.width) / 2, y: (bounds.height - size.height) / 2)
-        item.setDraggingFrame(CGRect(origin: origin, size: size), contents: icon)
+        for item in dragItems {
+            let fileType = UTType(filenameExtension: item.url.pathExtension)?.identifier ?? UTType.item.identifier
+            let provider = NSFilePromiseProvider(fileType: fileType, delegate: self)
+            provider.userInfo = item.url as NSURL
+            providerCompletions[ObjectIdentifier(provider)] = item.onComplete
 
-        beginDraggingSession(with: [item], event: mouseDown, source: self)
+            let icon = item.icon ?? NSWorkspace.shared.icon(forFile: item.url.path)
+            let draggingItem = NSDraggingItem(pasteboardWriter: provider)
+            let size = CGSize(width: 36, height: 36)
+            let origin = CGPoint(x: (bounds.width - size.width) / 2, y: (bounds.height - size.height) / 2)
+            draggingItem.setDraggingFrame(CGRect(origin: origin, size: size), contents: icon)
+            nsDraggingItems.append(draggingItem)
+        }
+
+        beginDraggingSession(with: nsDraggingItems, event: mouseDown, source: self)
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        guard !didDrag else { return }
+        if event.clickCount >= 2 {
+            onDoubleClick?()
+        } else {
+            onSingleClick?()
+        }
     }
 
     // MARK: - NSDraggingSource
@@ -68,7 +93,7 @@ final class FileDragSourceView: NSView, NSDraggingSource, NSFilePromiseProviderD
 
     func filePromiseProvider(_ filePromiseProvider: NSFilePromiseProvider,
                              fileNameForType fileType: String) -> String {
-        (filePromiseProvider.userInfo as? URL)?.lastPathComponent ?? fileURL?.lastPathComponent ?? "file"
+        (filePromiseProvider.userInfo as? URL)?.lastPathComponent ?? "file"
     }
 
     func filePromiseProvider(_ filePromiseProvider: NSFilePromiseProvider,
@@ -78,12 +103,11 @@ final class FileDragSourceView: NSView, NSDraggingSource, NSFilePromiseProviderD
             completionHandler(CocoaError(.fileNoSuchFile))
             return
         }
+        let onComplete = providerCompletions[ObjectIdentifier(filePromiseProvider)]
         do {
             try FileManager.default.copyItem(at: sourceURL, to: destURL)
             completionHandler(nil)
-            DispatchQueue.main.async { [weak self] in
-                self?.onDragComplete?()
-            }
+            DispatchQueue.main.async { onComplete?() }
         } catch {
             completionHandler(error)
         }

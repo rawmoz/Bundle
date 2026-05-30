@@ -59,15 +59,14 @@ Spacebar only works when macOS is in an active drag state. It does NOT trigger o
 - **Two distinct triggers** — see Core Interaction above. These are separate mechanisms, not interchangeable.
 - **Spacebar mid-drag** — puts a file in. Only fires when macOS is in an active drag state. Never fires on hover, click, or focus.
 - **Global hotkey ⌘⌥B** — opens/closes the shelf at any time
-- **Slot interaction model (v0.3):** hover does nothing. Return button (↩) appears on hover and operates on that slot only. Option held → trash icon. This will be replaced in v0.4 with a click-to-select model — see v0.4 spec below.
+- **Slot interaction model (v0.4):** hover does nothing. Single click selects a slot (blue ring + fill). Return button (↩) appears on the selected slot only. Control held → trash icon on all occupied slots. Double-click opens the file in its default app. Selection resets when the panel closes.
 
 ## File storage strategy (decided in v0.3)
 Using **move model**: files are physically moved into `~/Library/Application Support/Bundle/shelf/{uuid}/{filename}` on drop. Original location is recorded in a `manifest.json`. Shelf state persists across app launches.
 
-**Slot action button (v0.3 — will change in v0.4):**
-- Hover: `arrow.uturn.left` — moves file back to original location (falls back to Downloads if origin no longer exists)
-- Command held: all occupied slots show `trash.fill` in red — sends file to Trash via NSWorkspace.recycle
-- Note: in v0.4, Command is reassigned to multi-select. Trash mode moves to Option key.
+**Slot action button (v0.4):**
+- Selected slot shows `arrow.uturn.left` — moves file back to original location (falls back to Downloads if origin no longer exists)
+- Control held: all occupied slots show `trash.fill` in red — sends file to Trash via NSWorkspace.recycle
 
 **Drag-out:** uses AppKit `NSDraggingSource` (not SwiftUI `.onDrag`) so we get `draggingSession(_:endedAt:operation:)` callback. Slot is only cleared on confirmed non-cancel operation.
 
@@ -78,59 +77,49 @@ Using **move model**: files are physically moved into `~/Library/Application Sup
 **Sandbox note**: if the app is ever sandboxed (App Store), raw path strings won't survive security checks — will need security-scoped bookmarks in the manifest instead.
 
 ## Current state
-v0.3 complete. Full file lifecycle working: drop in, drag out, return to origin, trash. Structure:
+v0.4 complete. Click-to-select model, Control+trash, double-click to open. Structure:
 - `Bundle.xcodeproj` — Xcode project config
 - `Bundle/BundleApp.swift` — app entry point, delegates to AppDelegate
 - `Bundle/AppDelegate.swift` — wires ShelfWindowController + HotkeyManager on launch
 - `Bundle/ShelfConfig.swift` — config constants (slotCount, sizes, dragHandleHeight) + position persistence
 - `Bundle/ShelfWindowController.swift` — owns the NSPanel (show/hide/drag/position save)
-- `Bundle/ShelfView.swift` — SwiftUI slot UI; drop-in, icon display, return/trash button, Command key monitor, drag handle
+- `Bundle/ShelfView.swift` — SwiftUI slot UI; click-to-select, return/trash button, Control key monitor, drag handle
 - `Bundle/ShelfStore.swift` — owns slot state ([ShelfEntry?]); file move/return/trash/persistence; single place to swap storage strategy
-- `Bundle/FileDragSource.swift` — AppKit NSDraggingSource + NSFilePromiseProvider for drag-out (required to avoid Finder error -8058 from ~/Library/Application Support/)
+- `Bundle/FileDragSource.swift` — DragItem struct + AppKit NSDraggingSource + NSFilePromiseProvider; handles click, double-click, and drag-out with 5pt drag threshold
 - `Bundle/HotkeyManager.swift` — Carbon RegisterEventHotKey, fires ⌘⌥B
 - `Bundle/DragMonitor.swift` — stub for v0.2
 
-## v0.4 spec — Selection, multi-select, batch operations, double-click to open
+## v0.4 — What was built
 
 ### Interaction model
-- **Hover** — does nothing. No button, no highlight. Exactly like files on the desktop.
-- **Single click** — selects that slot. Deselects all others. Blue ring + subtle darker blue fill appears inside the circle.
-- **Command + click** — adds or removes that slot from the selection (multi-select). Other selections are preserved.
+- **Hover** — does nothing. No button, no highlight.
+- **Single click** — selects that slot. Deselects all others. Blue ring + subtle blue fill appears inside the circle.
 - **Click empty slot or empty area** — deselects everything.
-- **Selection resets when panel closes** — not persisted. Simple, no stale state on reopen.
+- **Selection resets when panel closes** — not persisted.
 
 ### Visual: selected state
-- Outer ring: system blue (full opacity, replaces the white stroke)
-- Circle fill: darker blue at low opacity (e.g. blue.opacity(0.2)) — just enough to distinguish from empty
-- Return button (↩) appears on selected slots, not on hover
-- Selection is the trigger for button visibility — hover is irrelevant
+- Outer ring: system blue (replaces white stroke), lineWidth 2
+- Circle fill: `Color.accentColor.opacity(0.2)`
+- Return button (↩) appears on selected slot only, not on hover
 
-### Modifier key reassignment
-- **Option held** → trash mode (was Command in v0.3). All occupied slots show red trash icon.
-- **Command** → exclusively for multi-select click behavior. No longer triggers trash.
-- This is a one-line change in the event monitor (`.option` instead of `.command`).
-
-### Batch operations
-- Return button on any selected slot → returns ALL selected files to their origins simultaneously
-- Option held → red trash icon on all selected slots → clicking one trashes ALL selected
-- Operations always act on the full selection, not just the slot being clicked
-
-### Multi-drag
-- Dragging from a selected slot → all selected files drag out together as a group (multiple NSDraggingItems in one session — AppKit supports this natively)
-- Dragging from an unselected slot → drags just that one file (selection untouched)
-- Each file in a multi-drag uses its own NSFilePromiseProvider
+### Modifier key
+- **Control held** → all occupied slots show red trash icon; clicking one sends that file to Trash
 
 ### Double-click to open
-- Double-click a slot → opens the file with its default app via NSWorkspace.open()
-- If slots are selected and you double-click one of them → opens ALL selected files (matches native macOS Finder behavior)
-- If you double-click a slot that is NOT selected → opens just that file, selection unchanged
-- Folders open in Finder; all other file types open in their default app
+- Double-click an occupied slot → opens the file in its default app via `NSWorkspace.open()`
+- Folders open in Finder; all other types open in their default app
+
+### Drag sensitivity
+- 5pt minimum drag threshold before drag session initiates — prevents accidental drags on click
+
+### Deferred to later version
+- Command+click multi-select — attempted, not reliable; removed cleanly for future revisit
 
 ## Roadmap
 - [x] v0.1 — Shelf appears and hides with a global hotkey (⌘⌥B)
 - [~] v0.2 — Detect spacebar mid-drag to trigger the shelf (parked — see "What was ruled out")
 - [x] v0.3 — Drop files in, drag files out, file icons, return-to-origin, command+trash, persistent storage, drag handle
-- [ ] v0.4 — Selection model, multi-select, batch operations, multi-drag, double-click to open (see v0.4 spec above)
+- [x] v0.4 — Click-to-select, Control+trash, double-click to open, drag sensitivity threshold
 - [ ] v0.5 — Polish and animations
 
 ## Repo

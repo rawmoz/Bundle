@@ -5,7 +5,8 @@ import UniformTypeIdentifiers
 struct ShelfView: View {
     @StateObject private var store = ShelfStore()
     @State private var dragOverIndex: Int? = nil
-    @State private var commandHeld = false
+    @State private var selectedIndices: Set<Int> = []
+    @State private var controlHeld = false
     @State private var localMonitor: Any? = nil
     @State private var globalMonitor: Any? = nil
 
@@ -20,10 +21,13 @@ struct ShelfView: View {
                         entry: store.slots[index],
                         storageURL: store.storageURL(at: index),
                         isHighlighted: dragOverIndex == index,
-                        commandHeld: commandHeld,
-                        onReturn: { store.returnToOrigin(at: index) },
-                        onTrash: { store.sendToTrash(at: index) },
-                        onDragOut: { store.completeDragOut(at: index) }
+                        isSelected: selectedIndices.contains(index),
+                        controlHeld: controlHeld,
+                        dragItems: buildDragItems(for: index),
+                        onSingleClick: { handleSingleClick(at: index) },
+                        onDoubleClick: { handleDoubleClick(at: index) },
+                        onReturn: { handleReturn(at: index) },
+                        onTrash: { handleTrash(at: index) }
                     )
                     .onDrop(of: [.fileURL], isTargeted: Binding(
                         get: { dragOverIndex == index },
@@ -34,14 +38,69 @@ struct ShelfView: View {
                 }
             }
             .padding(ShelfConfig.padding)
+            .contentShape(Rectangle())
+            .onTapGesture { selectedIndices = [] }
         }
         .background(
             RoundedRectangle(cornerRadius: ShelfConfig.cornerRadius, style: .continuous)
                 .fill(.ultraThinMaterial)
         )
-        .onAppear { startCommandMonitor() }
-        .onDisappear { stopCommandMonitor() }
+        .onAppear { startModifierMonitor() }
+        .onDisappear {
+            stopModifierMonitor()
+            selectedIndices = []
+        }
     }
+
+    // MARK: - Click handlers
+
+    private func handleSingleClick(at index: Int) {
+        if store.slots[index] == nil {
+            selectedIndices = []
+            return
+        }
+        selectedIndices = [index]
+    }
+
+    private func handleDoubleClick(at index: Int) {
+        guard store.slots[index] != nil else { return }
+        let targets = selectedIndices.contains(index) ? selectedIndices : [index]
+        for i in targets {
+            if let url = store.storageURL(at: i) {
+                NSWorkspace.shared.open(url)
+            }
+        }
+    }
+
+    // MARK: - Batch operations
+
+    private func handleReturn(at index: Int) {
+        let targets = selectedIndices.contains(index) ? selectedIndices : [index]
+        targets.forEach { store.returnToOrigin(at: $0) }
+        selectedIndices.subtract(targets)
+    }
+
+    private func handleTrash(at index: Int) {
+        let targets = selectedIndices.contains(index) ? selectedIndices : [index]
+        targets.forEach { store.sendToTrash(at: $0) }
+        selectedIndices.subtract(targets)
+    }
+
+    // MARK: - Multi-drag
+
+    private func buildDragItems(for index: Int) -> [DragItem] {
+        let indices = selectedIndices.contains(index)
+            ? Array(selectedIndices).sorted()
+            : [index]
+        return indices.compactMap { i -> DragItem? in
+            guard let url = store.storageURL(at: i) else { return nil }
+            return DragItem(url: url, icon: nil, onComplete: { [store] in
+                store.completeDragOut(at: i)
+            })
+        }
+    }
+
+    // MARK: - Drop
 
     private func handleDrop(providers: [NSItemProvider], into index: Int) -> Bool {
         guard store.slots[index] == nil,
@@ -57,19 +116,21 @@ struct ShelfView: View {
         return true
     }
 
-    private func startCommandMonitor() {
+    // MARK: - Modifier key monitor
+
+    private func startModifierMonitor() {
         localMonitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { event in
-            commandHeld = event.modifierFlags.contains(.command)
+            controlHeld = event.modifierFlags.contains(.control)
             return event
         }
         globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: .flagsChanged) { event in
             DispatchQueue.main.async {
-                commandHeld = event.modifierFlags.contains(.command)
+                controlHeld = event.modifierFlags.contains(.control)
             }
         }
     }
 
-    private func stopCommandMonitor() {
+    private func stopModifierMonitor() {
         if let m = localMonitor { NSEvent.removeMonitor(m); localMonitor = nil }
         if let m = globalMonitor { NSEvent.removeMonitor(m); globalMonitor = nil }
     }
@@ -109,41 +170,64 @@ struct SlotView: View {
     let entry: ShelfEntry?
     let storageURL: URL?
     let isHighlighted: Bool
-    let commandHeld: Bool
+    let isSelected: Bool
+    let controlHeld: Bool
+    let dragItems: [DragItem]
+    let onSingleClick: () -> Void
+    let onDoubleClick: () -> Void
     let onReturn: () -> Void
     let onTrash: () -> Void
-    let onDragOut: () -> Void
 
     @State private var icon: NSImage? = nil
-    @State private var isHovering = false
 
     var body: some View {
         ZStack {
+            if isSelected && entry != nil {
+                Circle()
+                    .fill(Color.accentColor.opacity(0.2))
+                    .frame(width: ShelfConfig.slotSize, height: ShelfConfig.slotSize)
+            }
+
             Circle()
-                .strokeBorder(borderColor, lineWidth: 1.5)
+                .strokeBorder(borderColor, lineWidth: isSelected && entry != nil ? 2 : 1.5)
                 .frame(width: ShelfConfig.slotSize, height: ShelfConfig.slotSize)
 
-            if let icon, let url = storageURL {
+            if let icon {
                 Image(nsImage: icon)
                     .resizable()
                     .scaledToFit()
                     .frame(width: ShelfConfig.slotSize * 0.65, height: ShelfConfig.slotSize * 0.65)
                     .overlay(
-                        FileDragSource(url: url, icon: icon, onComplete: onDragOut)
+                        FileDragSource(
+                            items: dragItems,
+                            onSingleClick: onSingleClick,
+                            onDoubleClick: onDoubleClick
+                        )
                     )
             }
 
-            if entry != nil && (isHovering || commandHeld) {
-                Button(action: commandHeld ? onTrash : onReturn) {
-                    Image(systemName: commandHeld ? "trash.fill" : "arrow.uturn.left")
-                        .foregroundColor(commandHeld ? .red.opacity(0.9) : .white.opacity(0.8))
-                        .font(.system(size: 14))
+            if entry != nil {
+                if controlHeld {
+                    Button(action: onTrash) {
+                        Image(systemName: "trash.fill")
+                            .foregroundColor(.red.opacity(0.9))
+                            .font(.system(size: 14))
+                    }
+                    .buttonStyle(.plain)
+                    .offset(x: ShelfConfig.slotSize * 0.3, y: -ShelfConfig.slotSize * 0.3)
+                } else if isSelected {
+                    Button(action: onReturn) {
+                        Image(systemName: "arrow.uturn.left")
+                            .foregroundColor(.white.opacity(0.8))
+                            .font(.system(size: 14))
+                    }
+                    .buttonStyle(.plain)
+                    .offset(x: ShelfConfig.slotSize * 0.3, y: -ShelfConfig.slotSize * 0.3)
                 }
-                .buttonStyle(.plain)
-                .offset(x: ShelfConfig.slotSize * 0.3, y: -ShelfConfig.slotSize * 0.3)
             }
         }
-        .onHover { isHovering = $0 }
+        .contentShape(Circle())
+        .onTapGesture { onSingleClick() }
         .onChange(of: storageURL) { _, newURL in
             loadIcon(for: newURL)
         }
@@ -154,6 +238,7 @@ struct SlotView: View {
 
     private var borderColor: Color {
         if isHighlighted { return .white.opacity(0.9) }
+        if isSelected && entry != nil { return .accentColor }
         if entry != nil { return .white.opacity(0.6) }
         return .white.opacity(0.25)
     }
