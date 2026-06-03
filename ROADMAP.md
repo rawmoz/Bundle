@@ -1,21 +1,26 @@
 # Bundle — Roadmap
 
 ## Architecture overview
-9 files, one job each:
+8 files, one job each:
 
 | File | Responsibility |
 |---|---|
-| `AppDelegate` | App entry point, wires all components together |
-| `HotkeyManager` | Registers and fires `⌘⌥B` global hotkey |
-| `BundleManager` | Single source of truth — owns all bundle state, handles create/delete/save/load |
-| `BundlePanelController` | One NSPanel per bundle, hosts SwiftUI content inside |
+| `BundleApp` | `@main` entry point, `MenuBarExtra`, owns `BundleManager` as `@State` |
+| `HotkeyManager` | Registers and fires `⌘⌥B` global hotkey, nothing else |
+| `BundleManager` | `@Observable` — single source of truth, owns all `BundleState` objects and `BundlePanelController` instances, handles create/delete/save/load |
+| `BundlePanelController` | NSPanel wrapper — one per bundle, hosts SwiftUI content inside |
 | `BundleGridView` | SwiftUI grid of cells for a given bundle |
-| `CellView` | Individual cell — empty or occupied states |
-| `MenuBarView` | SwiftUI popover content for the menu bar icon |
-| `BundleState` | Codable data model — name, grid size, cell array, screen position |
-| `CellState` | Codable data model — content URL, type (file/folder/image/text), display name |
+| `CellView` | Individual cell — empty and occupied states |
+| `MenuBarView` | MenuBarExtra popover content, NavigationStack lives here |
+| `Models` | `BundleState` (@Observable class) + `CellState` (struct) — always used together |
 
-State management via `@Observable` macro. Persistence via `Codable` structs encoded to JSON.
+**Key decisions:**
+- No `AppDelegate` — `MenuBarExtra` (macOS 13+) handles the menu bar natively in SwiftUI
+- `BundleState` is a **class** (required for `@Observable`)
+- `CellState` is a **struct** (value type, lives inside `BundleState`)
+- Position saves to `manifest.json` — not `UserDefaults`. One source of truth per bundle.
+- File I/O is async via `async/await`
+- Bundle discovery on launch by scanning the Bundles directory — no separate index file
 
 ---
 
@@ -23,14 +28,14 @@ State management via `@Observable` macro. Persistence via `Codable` structs enco
 **Goal:** prove the overlay concept. App exists, hotkey fires, panel appears.
 
 - macOS app with no dock icon (`LSUIElement = true` in Info.plist)
-- Menu bar icon appears (no popover yet, just the icon)
+- `BundleApp` sets up `MenuBarExtra` — icon appears in menu bar (no popover yet)
 - `⌘⌥B` global hotkey registered via `HotkeyManager`
 - One hardcoded `BundlePanelController` created on launch
 - Panel is a floating `NSPanel` — frosted glass material, rounded corners, correct visual aesthetic from day one
 - Hardcoded 1x3 grid of empty cells renders inside the panel
 - Hotkey shows and hides the panel
 
-**Files introduced:** `AppDelegate`, `HotkeyManager`, `BundlePanelController`, `BundleGridView`, `CellView`
+**Files introduced:** `BundleApp`, `HotkeyManager`, `BundlePanelController`, `BundleGridView`, `CellView`
 
 **Done when:** app lives in menu bar, `⌘⌥B` toggles a frosted glass panel with empty circles.
 
@@ -39,24 +44,24 @@ State management via `@Observable` macro. Persistence via `Codable` structs enco
 ## v0.2 — Bundle creation
 **Goal:** user can create real bundles from the menu bar.
 
-- Menu bar icon is clickable, opens a translucent SwiftUI popover
+- Menu bar icon opens a translucent SwiftUI popover (`MenuBarExtra`)
 - Popover home screen:
   - `+ Add new bundle`
   - Show / Hide (mirrors `⌘⌥B`)
   - Quit
-- Tapping `+ Add new bundle` pushes to creation page via `NavigationStack`
-- Creation page has:
+- `+ Add new bundle` pushes to creation page via `NavigationStack`
+- Creation page:
   - Text field for custom bundle name
-  - Table Grid picker — tap to select dimensions (1x1 up to 5x5)
+  - Table Grid picker — select dimensions from 1x1 up to 5x5
   - Create button
 - Hitting Create:
   - `BundleManager` creates a new `BundleState`
-  - A new `BundlePanelController` is instantiated and panel appears on screen
+  - New `BundlePanelController` instantiated, panel appears on screen
   - Popover closes
 - Multiple bundles can exist simultaneously
 - Hardcoded panel from v0.1 is removed
 
-**Files introduced:** `MenuBarView`, `BundleManager`, `BundleState`
+**Files introduced:** `MenuBarView`, `BundleManager`, `Models`
 
 **Done when:** user can create multiple named bundles with different grid sizes from the menu bar.
 
@@ -67,71 +72,68 @@ State management via `@Observable` macro. Persistence via `Codable` structs enco
 
 - `:::` handle renders at the top of each bundle panel
 - **Hold + drag** on handle moves the panel anywhere on screen
-- Position saves to `UserDefaults` per bundle UUID on drag end
+- Position saves to `manifest.json` on drag end
 - Position restores on next launch
-- **Click** on handle opens a settings popover:
-  - Rename — editable text field, updates panel header live
-  - Change size — re-opens Table Grid picker, resizes the cell grid
-  - Delete — removes the panel from screen and deletes its `BundleState`
+- **Click** on handle opens settings popover:
+  - Rename — updates panel header live
+  - Change size — re-opens Table Grid picker, resizes cell grid
+  - Delete — removes panel from screen, deletes bundle directory from disk
 - `⌘⌥B` correctly shows/hides ALL panels simultaneously
 
-**Files modified:** `BundlePanelController`, `BundleGridView`, `BundleManager`, `BundleState`
+**Files modified:** `BundlePanelController`, `BundleGridView`, `BundleManager`, `Models`
 
-**Done when:** bundles are draggable, position persists, settings popover works for all three actions.
+**Done when:** bundles are draggable, position persists, all three settings actions work.
 
 ---
 
 ## v0.4 — Cell interaction & storage
-**Goal:** cells accept content and files are stored safely on disk.
+**Goal:** cells accept content and everything persists on disk.
 
-These two are built together — doing interaction without storage would mean throwing code away.
+Built together — interaction without storage means rewriting it anyway.
 
 ### Cell interaction
-- One-click selects a cell — blue ring appears, all others deselect
+- One-click selects a cell — blue ring, all others deselect
 - Clicking empty space or another cell deselects
-- `⌘V` on a selected empty cell pastes clipboard content into it
+- `⌘V` on a selected empty cell pastes clipboard content in
 - Drag any file, folder, or image directly into a cell
 - `⌘C` on a selected occupied cell copies content back to clipboard
-- Right-click on empty cell → context menu: Paste
-- Right-click on occupied cell → context menu: Delete content, More (TBD)
+- Right-click on empty cell → Paste
+- Right-click on occupied cell → Delete content, More (TBD)
 
 ### Storage
 - On first launch, creates `~/Library/Application Support/Bundle/Bundles/`
 - Each bundle gets a UUID-named subdirectory
-- When content is dropped into a cell, it is **moved** (not copied) into the bundle's directory
+- Content dropped into a cell is **moved** (not copied) into the bundle's directory
 - Plain text pasted from clipboard is saved as a `.txt` file
-- Each bundle directory contains a `manifest.json` tracking:
-  - Bundle name, grid dimensions
+- Each bundle directory contains a `manifest.json`:
+  - Bundle name, grid dimensions, screen position
   - Cell index → filename mapping
-  - Content type per cell
-  - Display name per cell
-- On launch, `BundleManager` reads all bundle directories, reconstructs state from manifests
-- All content is safe on disk if app crashes
+  - Content type and display name per cell
+- On launch, `BundleManager` scans the Bundles directory and reconstructs state from each `manifest.json`
+- App crash safe — all content is on disk
 
 ### Thumbnails
 - File/folder — native macOS icon via `NSWorkspace`
 - Image — actual image preview rendered inline
-- Plain text — text document icon, first ~25 characters shown as name
+- Plain text — text document icon, first ~25 characters as name
 
-**Files introduced:** `CellState`
-**Files modified:** `BundleManager`, `BundleGridView`, `CellView`, `BundleState`
+**Files modified:** `BundleManager`, `BundleGridView`, `CellView`, `Models`
 
-**Done when:** user can paste and drag files into cells, content survives app restart, files live in app support directory.
+**Done when:** user can paste and drag content into cells, everything survives app restart.
 
 ---
 
 ## v0.5 — Drag out & copy out
 **Goal:** getting content back out of a cell.
 
-- Drag from an occupied cell back to Finder or any app — behaves like a normal system drag
-- Uses `NSFilePromiseProvider` or `NSDraggingSource` for proper AppKit drag-out
-- Cell is only cleared after a confirmed non-cancelled drop
-- `⌘C` on selected cell copies the file URL to clipboard (already in v0.4, verified here)
-- Delete content via right-click removes file from cell and sends it to Trash via `NSWorkspace.recycle`
+- Drag from an occupied cell back to Finder or any app — normal system drag
+- Uses `NSDraggingSource` for proper AppKit drag-out
+- Cell only clears after a confirmed non-cancelled drop
+- Delete content via right-click sends file to Trash via `NSWorkspace.recycle`
 
 **Files modified:** `CellView`, `BundleManager`
 
-**Done when:** files can be dragged back out to Finder and deleted cleanly.
+**Done when:** files drag back out to Finder cleanly and delete correctly.
 
 ---
 
@@ -139,19 +141,18 @@ These two are built together — doing interaction without storage would mean th
 **Goal:** the app feels premium and complete.
 
 - Bundle panel appear/disappear animation (fade or subtle scale)
-- Cell fill animation when content is dropped in
-- Cell clear animation when content is deleted
-- `⌘⌥B` show/hide is animated across all panels
-- Off-screen bundle recovery — if a bundle's saved position is outside all current screen bounds (e.g. external display disconnected), auto-move to main display on launch
-- Empty state — if user has no bundles, menu bar popover shows a prompt to create one
-- Visual QA pass — corner radius, blur material, spacing, typography all consistent
+- Cell fill and clear animations
+- `⌘⌥B` show/hide animated across all panels
+- Off-screen bundle recovery — auto-move to main display if saved position is outside all screen bounds
+- Empty state in popover when no bundles exist yet
+- Visual QA — corner radius, blur material, spacing, typography all consistent
 
 **Done when:** app feels polished enough to use daily.
 
 ---
 
 ## Future / TBD
-- Context menu "More" items (TBD in v0.4)
+- Context menu "More" items
 - Horizontal grid orientation toggle
-- iCloud sync for bundles across Macs
+- iCloud sync across Macs
 - Onboarding flow for first launch
