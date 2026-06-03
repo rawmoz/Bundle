@@ -13,10 +13,11 @@ Note: `Bundle` is a reserved type in Swift/Foundation (`Bundle.main` etc.), so a
 An empty container — like an unoccupied lot. One-click selects it (turns blue). Once selected, the user fills it by pasting (`⌘V`), dragging content in, or right-click → Paste. Once occupied it shows a thumbnail and the item's name underneath.
 
 ## Creating a Bundle
-1. Click "Add new bundle"
-2. Enter a custom name (e.g. "School Stuff")
-3. Pick a size via the Table Grid picker — any configuration from 1x1 up to 5x5 (columns x rows)
-4. Bundle appears on screen ready to use
+1. Click menu bar icon → popover opens
+2. Click "+ Add new bundle" → popover navigates to creation page (inline, NavigationStack)
+3. Enter a custom name (e.g. "School Stuff")
+4. Pick a size via the Table Grid picker — any configuration from 1x1 up to 5x5 (columns x rows)
+5. Hit Create → bundle appears on screen, popover closes
 
 ## Grid layout
 Bundles are true 2D grids. The user selects dimensions at creation (e.g. 1x5, 3x2, 4x3). Max size is 5x5. The grid determines the number of cells — a 3x2 grid has 6 cells. Grid size can be changed later via bundle settings.
