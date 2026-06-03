@@ -1,21 +1,25 @@
 # Bundle — Claude Context
 
 ## What this is
-A macOS overlay utility that lets users create named Bundles — floating panels that live on the desktop. Each Bundle contains Cells (circular slots) that hold files, folders, images, or plain text. Press `⌘⌥B` to show or hide all bundles.
+A macOS overlay utility that lets users create named Bundles — floating panels that live on the desktop. Each Bundle contains Cells (circular slots) that hold files, folders, images, or plain text. Press `⌘⌥B` to toggle all bundles on/off.
 
 ## Core concepts
 
-**Bundle**
+**Bundle (internal Swift type: `BundlePanel`)**
 A named floating panel. Multiple bundles can exist simultaneously, each freely positioned anywhere on the desktop. Position is saved and restored on launch.
+Note: `Bundle` is a reserved type in Swift/Foundation (`Bundle.main` etc.), so all internal model and UI types use the name `BundlePanel` to avoid compiler conflicts.
 
-**Cell**
-An empty container — like an unoccupied lot. One-click selects it (turns blue). Once selected, the user fills it by pasting (`⌘V`), dragging content in, or using right-click → Paste. Once occupied it shows a thumbnail and the item's name underneath.
+**Cell (internal Swift type: `BundleCell`)**
+An empty container — like an unoccupied lot. One-click selects it (turns blue). Once selected, the user fills it by pasting (`⌘V`), dragging content in, or right-click → Paste. Once occupied it shows a thumbnail and the item's name underneath.
 
 ## Creating a Bundle
 1. Click "Add new bundle"
 2. Enter a custom name (e.g. "School Stuff")
-3. Pick a size via the Table Grid picker (visual grid of rows/columns)
-4. Bundle appears on screen, ready to use
+3. Pick a size via the Table Grid picker — any configuration from 1x1 up to 5x5 (columns x rows)
+4. Bundle appears on screen ready to use
+
+## Grid layout
+Bundles are true 2D grids. The user selects dimensions at creation (e.g. 1x5, 3x2, 4x3). Max size is 5x5. The grid determines the number of cells — a 3x2 grid has 6 cells. Grid size can be changed later via bundle settings.
 
 ## Bundle header (`:::` handle)
 - **Hold + drag** — moves the bundle anywhere on the desktop, position saves automatically
@@ -44,21 +48,38 @@ Each cell holds one item. Thumbnail and name display underneath:
 
 | Type | Thumbnail | Name shown |
 |---|---|---|
-| File (PDF, doc, etc.) | Native macOS file icon (NSWorkspace) | Filename |
-| Folder | Native macOS folder icon (NSWorkspace) | Folder name |
+| File (PDF, doc, etc.) | Native macOS file icon via NSWorkspace | Filename |
+| Folder | Native macOS folder icon via NSWorkspace | Folder name |
 | Image (PNG, JPG, etc.) | Actual image preview | Filename |
 | Plain text | Text document icon | First ~25 characters of content |
 
 ## Storage model
-Bundles and their cells are stored locally in the app's Application Support folder. Each Bundle is a directory. Each cell's content lives as a file inside that directory (files, folders, and images are moved in; plain text is saved as a `.txt` file). A `manifest.json` per Bundle tracks cell order, names, and metadata. If the app crashes, all content is safe on disk.
+One master folder lives at `~/Library/Application Support/Bundle/Bundles/`. Each BundlePanel gets its own subdirectory named by UUID. Files and folders dropped into a cell are **moved** (not copied) into that bundle's directory. Plain text is saved as a `.txt` file. A `manifest.json` per bundle tracks cell positions, display names, and metadata. If the app crashes, all content is safe on disk.
+
+```
+~/Library/Application Support/Bundle/
+  Bundles/
+    [bundle-uuid]/
+      manifest.json
+      [cell content files and folders]
+    [bundle-uuid]/
+      manifest.json
+      [cell content files and folders]
+```
+
+## Hotkey behavior
+`⌘⌥B` toggles ALL bundles simultaneously — one press shows all, next press hides all.
 
 ## Positioning
-Free positioning — bundles float anywhere on screen. User drags via the `:::` handle to reposition. Position persists per bundle via UserDefaults and is restored on next launch.
+Free positioning — bundles float anywhere on screen. User drags via the `:::` handle. Position persists per bundle and is restored on next launch. If a bundle's saved position is off-screen (e.g. external display disconnected), it auto-moves to the main display on next launch.
+
+## Visual design
+Translucent frosted glass panels — Apple premium aesthetic. Rounded corners, dark translucent material (SwiftUI `.ultraThinMaterial` or similar), feels native and minimal. No heavy chrome. Think system control center vibes.
 
 ## Tech stack
 - **Swift** — language
 - **SwiftUI** — UI layer
-- **AppKit** — window management, floating panels
+- **AppKit** — window management, floating NSPanels
 - **NSWorkspace** — native file icons and image thumbnails
 - **Carbon** — global hotkey registration (`⌘⌥B`)
 - **Xcode** — IDE and build tool
@@ -70,6 +91,9 @@ Free positioning — bundles float anywhere on screen. User drags via the `:::` 
 - User pastes errors from Xcode, Claude fixes them
 - Do not hard-code values that are meant to be configurable later
 - Update this file at the end of every session
+
+## Open question
+- App presence: menu bar icon, dock icon, or invisible background app (hotkey only)?
 
 ## Roadmap
 - [ ] TBD — full design being finalized
