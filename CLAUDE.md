@@ -92,8 +92,11 @@ Translucent frosted glass panels — Apple premium aesthetic. Rounded corners, d
 - Do not hard-code values that are meant to be configurable later
 - Update this file at the end of every session
 
-## Open question
-- App presence: menu bar icon, dock icon, or invisible background app (hotkey only)?
+## Menu bar
+App lives as a menu bar icon (no dock icon). Clicking it opens a small translucent popover — same frosted glass aesthetic as the bundles:
+- + Add new bundle
+- Show / Hide (mirrors `⌘⌥B`)
+- Quit
 
 ## Roadmap
 - [ ] TBD — full design being finalized
