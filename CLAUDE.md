@@ -100,7 +100,7 @@ App lives as a menu bar icon (no dock icon). Clicking it opens a small transluce
 - Quit
 
 ## Roadmap
-- [ ] TBD — full design being finalized
+See `ROADMAP.md` for the full versioned build plan.
 
 ## Repo
 Local: /Users/danielramos/dev/Bundle
