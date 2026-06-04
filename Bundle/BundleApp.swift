@@ -1,17 +1,12 @@
-//
-//  BundleApp.swift
-//  Bundle
-//
-//  Created by Daniel Ramos on 6/1/26.
-//
-
 import SwiftUI
 
 @main
 struct BundleApp: App {
+    @State private var coordinator = AppCoordinator()
+
     var body: some Scene {
-        WindowGroup {
-            ContentView()
+        MenuBarExtra("Bundle", systemImage: "square.stack.3d.up") {
+            Button("Quit") { NSApplication.shared.terminate(nil) }
         }
     }
 }

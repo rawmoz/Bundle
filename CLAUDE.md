@@ -99,6 +99,21 @@ App lives as a menu bar icon (no dock icon). Clicking it opens a small transluce
 - Show / Hide (mirrors `⌘⌥B`)
 - Quit
 
+## Implementation notes
+
+### Global hotkey (HotkeyManager)
+`InstallApplicationEventHandler` from Carbon is unavailable in modern Swift — the UPP-style function pointer it requires is not bridged. The working pattern:
+1. `RegisterEventHotKey` to register `⌘⌥B` globally (this IS available in Swift)
+2. `NSEvent.addLocalMonitorForEvents(matching: .systemDefined)` to detect firing — Carbon routes the hotkey event to our own app queue as a `.systemDefined` event with `subtype.rawValue == 6`
+
+No Accessibility permissions required. Works in sandboxed apps.
+
+### Panel setup
+`NSPanel` with `.borderless + .nonactivatingPanel` style mask. Size calculated explicitly: `padding(16) + columns * cellSize(64) + (columns-1) * gap(12) + padding(16)`. Cell size 64pt matches macOS Control Center small widget size.
+
+### v0.1 coordinator
+`AppCoordinator` is a temporary `@Observable` class stored as `@State` in `BundleApp`. It owns `[BundlePanelController]` and `HotkeyManager` for v0.1 only. In v0.2 it is deleted and replaced by `BundleManager`.
+
 ## Roadmap
 See `ROADMAP.md` for the full versioned build plan.
 

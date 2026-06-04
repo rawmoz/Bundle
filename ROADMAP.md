@@ -24,7 +24,7 @@
 
 ---
 
-## v0.1 — Foundation
+## v0.1 — Foundation ✅ (2026-06-04)
 **Goal:** prove the overlay concept. App exists, hotkey fires, panel appears.
 
 - macOS app with no dock icon (`LSUIElement = true` in Info.plist)
@@ -36,6 +36,7 @@
 - Hotkey shows and hides the panel
 
 **Files introduced:** `BundleApp`, `HotkeyManager`, `BundlePanelController`, `BundleGridView`, `CellView`
+**Temporary scaffold:** `AppCoordinator` — owns the hardcoded panel + hotkey wiring for v0.1 only. Replaced by `BundleManager` in v0.2.
 
 **Done when:** app lives in menu bar, `⌘⌥B` toggles a frosted glass panel with empty circles.
 
