@@ -111,8 +111,11 @@ No Accessibility permissions required. Works in sandboxed apps.
 ### Panel setup
 `NSPanel` with `.borderless + .nonactivatingPanel` style mask. Size calculated explicitly: `padding(16) + columns * cellSize(64) + (columns-1) * gap(12) + padding(16)`. Cell size 64pt matches macOS Control Center small widget size.
 
-### v0.1 coordinator
-`AppCoordinator` is a temporary `@Observable` class stored as `@State` in `BundleApp`. It owns `[BundlePanelController]` and `HotkeyManager` for v0.1 only. In v0.2 it is deleted and replaced by `BundleManager`.
+### State ownership (v0.2)
+`AppCoordinator` is gone. `BundleManager` (`@Observable`, held as `@State` in `BundleApp`) is the single source of truth — it owns every `BundleState`, the matching `BundlePanelController` keyed by UUID, and the `HotkeyManager`. `createBundle` builds the state, spins up a controller, and shows it. `toggleAll` shows/hides every panel together. Persistence still pending (v0.4) — bundles are in-memory only.
+
+### Menu bar popover (v0.2)
+`MenuBarExtra` uses `.menuBarExtraStyle(.window)` so the popover hosts a real SwiftUI view (`MenuBarView`) with a `NavigationStack`. Home → "Add new bundle" pushes the creation page (name field + a table-insert-style `GridSizePicker`, 1×1 up to 5×5). `.window` style has no official dismiss API; after Create we call `NSApp.keyWindow?.close()` to collapse the popover.
 
 ## Roadmap
 See `ROADMAP.md` for the full versioned build plan.

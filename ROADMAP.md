@@ -42,7 +42,7 @@
 
 ---
 
-## v0.2 — Bundle creation
+## v0.2 — Bundle creation ✅ (2026-06-07)
 **Goal:** user can create real bundles from the menu bar.
 
 - Menu bar icon opens a translucent SwiftUI popover (`MenuBarExtra`)
