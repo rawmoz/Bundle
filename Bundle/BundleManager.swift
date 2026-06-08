@@ -18,8 +18,16 @@ final class BundleManager {
         let state = BundleState(name: name, columns: columns, rows: rows)
         bundles.append(state)
         let controller = BundlePanelController(bundle: state)
+        controller.onRequestDelete = { [weak self] in self?.deleteBundle(state) }
         controllers[state.id] = controller
         controller.show()
+    }
+
+    func deleteBundle(_ bundle: BundleState) {
+        controllers[bundle.id]?.close()
+        controllers[bundle.id] = nil
+        bundles.removeAll { $0.id == bundle.id }
+        // v0.4: also delete the bundle's directory from disk here.
     }
 
     func toggleAll() {

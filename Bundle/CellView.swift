@@ -8,6 +8,6 @@ struct CellView: View {
                 Circle()
                     .strokeBorder(.white.opacity(0.3), lineWidth: 1.5)
             )
-            .frame(width: 64, height: 64)
+            .frame(width: BundleLayout.cellSize, height: BundleLayout.cellSize)
     }
 }

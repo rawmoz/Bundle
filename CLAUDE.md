@@ -109,7 +109,14 @@ App lives as a menu bar icon (no dock icon). Clicking it opens a small transluce
 No Accessibility permissions required. Works in sandboxed apps.
 
 ### Panel setup
-`NSPanel` with `.borderless + .nonactivatingPanel` style mask. Size calculated explicitly: `padding(16) + columns * cellSize(64) + (columns-1) * gap(12) + padding(16)`. Cell size 64pt matches macOS Control Center small widget size.
+`NSPanel` with `.borderless + .nonactivatingPanel` style mask. Size comes from `BundleLayout.panelSize(columns:rows:)` (in `Models.swift`) — the single source of the cell/gap/pad/handle geometry, shared by the SwiftUI layout and the AppKit panel frame so they can't drift. Cell size 64pt matches macOS Control Center small widget size. The panel height includes the `:::` handle row above the grid.
+
+### Positioning & settings (v0.3)
+- Drag-to-move lives on the `:::` handle only. `BundlePanelController` repositions the panel from absolute `NSEvent.mouseLocation` (plus a mouse-to-origin offset captured at drag start), **not** the SwiftUI gesture translation — translation jitters because moving the window shifts the view under the cursor.
+- Click (not drag) on the handle opens the settings popover (rename / change size / delete). `.onTapGesture` coexists with `DragGesture(minimumDistance: 4)`.
+- Rename binds straight to `bundle.name` (`@Observable`, updates live). Change size calls `bundle.resize(...)` then `applyResize()` which resizes the panel top-anchored. Delete routes through `controller.onRequestDelete` → `BundleManager.deleteBundle`.
+- **Rename text field needs a key window.** Borderless panels can't become key by default, so `BundlePanelController` uses a `KeyablePanel: NSPanel` subclass overriding `canBecomeKey`. `.nonactivatingPanel` means becoming key doesn't activate the app or steal focus.
+- **Position is in-memory only in v0.3.** `BundleState.position` is written on drag-end and resize and read on first `show()`, but there's no disk layer yet and bundles don't survive relaunch — see "Storage model" / v0.4. Two `// v0.4: persist to manifest.json here` markers in `BundlePanelController` flag where the save goes.
 
 ### State ownership (v0.2)
 `AppCoordinator` is gone. `BundleManager` (`@Observable`, held as `@State` in `BundleApp`) is the single source of truth — it owns every `BundleState`, the matching `BundlePanelController` keyed by UUID, and the `HotkeyManager`. `createBundle` builds the state, spins up a controller, and shows it. `toggleAll` shows/hides every panel together. Persistence still pending (v0.4) — bundles are in-memory only.

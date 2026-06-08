@@ -1,18 +1,19 @@
 # Bundle — Roadmap
 
 ## Architecture overview
-8 files, one job each:
+9 files, one job each:
 
 | File | Responsibility |
 |---|---|
 | `BundleApp` | `@main` entry point, `MenuBarExtra`, owns `BundleManager` as `@State` |
 | `HotkeyManager` | Registers and fires `⌘⌥B` global hotkey, nothing else |
 | `BundleManager` | `@Observable` — single source of truth, owns all `BundleState` objects and `BundlePanelController` instances, handles create/delete/save/load |
-| `BundlePanelController` | NSPanel wrapper — one per bundle, hosts SwiftUI content inside |
-| `BundleGridView` | SwiftUI grid of cells for a given bundle |
+| `BundlePanelController` | NSPanel wrapper — one per bundle, hosts SwiftUI content, owns drag/move/resize |
+| `BundleGridView` | SwiftUI grid of cells + `:::` handle + settings popover for a given bundle |
 | `CellView` | Individual cell — empty and occupied states |
+| `GridSizePicker` | Shared table-insert size picker (1×1–5×5), used by creation page and settings |
 | `MenuBarView` | MenuBarExtra popover content, NavigationStack lives here |
-| `Models` | `BundleState` (@Observable class) + `CellState` (struct) — always used together |
+| `Models` | `BundleState` (@Observable class) + `CellState` (struct) + `BundleLayout` (shared panel geometry) |
 
 **Key decisions:**
 - No `AppDelegate` — `MenuBarExtra` (macOS 13+) handles the menu bar natively in SwiftUI
@@ -68,22 +69,48 @@
 
 ---
 
-## v0.3 — Bundle positioning & settings
+## v0.3 — Bundle positioning & settings 🚧 (in progress, 2026-06-08)
 **Goal:** bundles are movable and configurable.
 
+**Remaining for v0.3:** render the bundle **name** as a small header label next to the
+`:::` handle (top-left, muted, truncating). The rename logic already updates it live —
+the visible label is the last missing piece. Everything below is done and verified.
+
 - `:::` handle renders at the top of each bundle panel
-- **Hold + drag** on handle moves the panel anywhere on screen
-- Position saves to `manifest.json` on drag end
-- Position restores on next launch
+- **Hold + drag** on handle moves the panel anywhere on screen — uses absolute
+  `NSEvent.mouseLocation` (not gesture translation, which jitters as the window
+  moves under the cursor)
 - **Click** on handle opens settings popover:
-  - Rename — updates panel header live
-  - Change size — re-opens Table Grid picker, resizes cell grid
-  - Delete — removes panel from screen, deletes bundle directory from disk
-- `⌘⌥B` correctly shows/hides ALL panels simultaneously
+  - Rename — bound to `bundle.name`, panel header updates live (`@Observable`)
+  - Change size — re-opens the shared `GridSizePicker`, rebuilds the cell grid and
+    resizes the panel top-anchored (`BundleLayout.panelSize`)
+  - Delete — `BundleManager.deleteBundle` closes the panel and drops the state
+- `⌘⌥B` correctly shows/hides ALL panels simultaneously (unchanged from v0.2)
+
+**⚠️ Persistence deferred to v0.4 — intentional.** Position now lives in memory on
+`BundleState.position`: the drag handler and resize write to it, and `show()` reads
+it (centering on first show). But there is no disk layer yet, and bundles themselves
+are in-memory only, so position does **not** survive relaunch — there is nothing to
+restore onto. v0.4 adds `manifest.json`; persisting position is then a one-line save
+at the two `// v0.4: persist` markers in `BundlePanelController` + a load in
+`BundleManager`. Building a throwaway position-persistence path now was rejected.
 
 **Files modified:** `BundlePanelController`, `BundleGridView`, `BundleManager`, `Models`
+**Files introduced:** `GridSizePicker` (extracted from `MenuBarView` so the settings
+popover can reuse it); `BundleLayout` added to `Models`
 
-**Done when:** bundles are draggable, position persists, all three settings actions work.
+**Implementation notes:**
+- Borderless `NSPanel` can't become key, which would block the rename field from
+  typing. `BundlePanelController` uses a `KeyablePanel: NSPanel` subclass overriding
+  `canBecomeKey`; `.nonactivatingPanel` keeps it from stealing focus / activating the app.
+- Click vs drag on the handle: `.onTapGesture` (settings) coexists with
+  `DragGesture(minimumDistance: 4)` (move) — a still click stays a tap.
+- `BundleLayout` centralizes cell/gap/pad/handle geometry so the SwiftUI layout and
+  the AppKit panel frame can't drift apart.
+
+**Done when:** bundles are draggable, settings rename/resize/delete all work, and the
+bundle name shows as a header label. (Position persistence across relaunch lands with
+storage in v0.4.)
 
 ---
 
