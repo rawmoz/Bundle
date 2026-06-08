@@ -69,13 +69,11 @@
 
 ---
 
-## v0.3 — Bundle positioning & settings 🚧 (in progress, 2026-06-08)
+## v0.3 — Bundle positioning & settings ✅ (2026-06-08)
 **Goal:** bundles are movable and configurable.
 
-**Remaining for v0.3:** render the bundle **name** as a small header label next to the
-`:::` handle (top-left, muted, truncating). The rename logic already updates it live —
-the visible label is the last missing piece. Everything below is done and verified.
-
+- Title row: bundle **name** label (small, muted, left, truncating) + `:::` grip on the
+  right. Rename updates the label live (`@Observable`); blank name shows "Untitled".
 - `:::` handle renders at the top of each bundle panel
 - **Hold + drag** on handle moves the panel anywhere on screen — uses absolute
   `NSEvent.mouseLocation` (not gesture translation, which jitters as the window
@@ -109,7 +107,7 @@ popover can reuse it); `BundleLayout` added to `Models`
   the AppKit panel frame can't drift apart.
 
 **Done when:** bundles are draggable, settings rename/resize/delete all work, and the
-bundle name shows as a header label. (Position persistence across relaunch lands with
+bundle name shows as a header label. ✅ (Position persistence across relaunch lands with
 storage in v0.4.)
 
 ---

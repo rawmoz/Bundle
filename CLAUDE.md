@@ -112,6 +112,7 @@ No Accessibility permissions required. Works in sandboxed apps.
 `NSPanel` with `.borderless + .nonactivatingPanel` style mask. Size comes from `BundleLayout.panelSize(columns:rows:)` (in `Models.swift`) — the single source of the cell/gap/pad/handle geometry, shared by the SwiftUI layout and the AppKit panel frame so they can't drift. Cell size 64pt matches macOS Control Center small widget size. The panel height includes the `:::` handle row above the grid.
 
 ### Positioning & settings (v0.3)
+- The panel's title row is the bundle **name** (small, muted, left, truncating) with the `:::` grip on the right. Only the grip is interactive; the name is a passive label and shows "Untitled" when `bundle.name` is empty.
 - Drag-to-move lives on the `:::` handle only. `BundlePanelController` repositions the panel from absolute `NSEvent.mouseLocation` (plus a mouse-to-origin offset captured at drag start), **not** the SwiftUI gesture translation — translation jitters because moving the window shifts the view under the cursor.
 - Click (not drag) on the handle opens the settings popover (rename / change size / delete). `.onTapGesture` coexists with `DragGesture(minimumDistance: 4)`.
 - Rename binds straight to `bundle.name` (`@Observable`, updates live). Change size calls `bundle.resize(...)` then `applyResize()` which resizes the panel top-anchored. Delete routes through `controller.onRequestDelete` → `BundleManager.deleteBundle`.

@@ -48,15 +48,15 @@ final class BundleState: Identifiable {
 // one place means the NSPanel frame and the SwiftUI content can never drift apart.
 enum BundleLayout {
     static let cellSize: CGFloat = 64   // matches macOS Control Center small widget
-    static let gap: CGFloat = 12        // spacing between cells and around the handle
+    static let gap: CGFloat = 12        // spacing between cells and around the header
     static let pad: CGFloat = 16        // outer padding inside the rounded panel
-    static let handleHeight: CGFloat = 10 // the `:::` drag handle row
+    static let headerHeight: CGFloat = 18 // title row: name label + `:::` grip
 
-    // Full panel size: outer padding + handle + gap + grid (cells and inter-cell gaps).
+    // Full panel size: outer padding + header + gap + grid (cells and inter-cell gaps).
     static func panelSize(columns: Int, rows: Int) -> CGSize {
         let width = pad + CGFloat(columns) * cellSize + CGFloat(max(columns - 1, 0)) * gap + pad
         let gridHeight = CGFloat(rows) * cellSize + CGFloat(max(rows - 1, 0)) * gap
-        let height = pad + handleHeight + gap + gridHeight + pad
+        let height = pad + headerHeight + gap + gridHeight + pad
         return CGSize(width: width, height: height)
     }
 }

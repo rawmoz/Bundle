@@ -18,15 +18,30 @@ struct BundleGridView: View {
                 .fill(.ultraThinMaterial)
 
             VStack(spacing: BundleLayout.gap) {
-                handle
+                header
                 grid
             }
             .padding(BundleLayout.pad)
         }
     }
 
-    // The `:::` grip. Hold + drag moves the panel; a plain click opens settings.
-    private var handle: some View {
+    // Title row: bundle name on the left, `:::` grip on the right.
+    private var header: some View {
+        HStack(spacing: 8) {
+            Text(bundle.name.isEmpty ? "Untitled" : bundle.name)
+                .font(.caption)
+                .foregroundStyle(.white.opacity(0.6))
+                .lineLimit(1)
+                .truncationMode(.tail)
+            Spacer(minLength: 4)
+            grip
+        }
+        .frame(height: BundleLayout.headerHeight)
+    }
+
+    // The `:::` grip — the only interactive part of the header.
+    // Hold + drag moves the panel; a plain click opens settings.
+    private var grip: some View {
         HStack(spacing: 4) {
             ForEach(0..<3, id: \.self) { _ in
                 VStack(spacing: 3) {
@@ -36,8 +51,6 @@ struct BundleGridView: View {
             }
         }
         .foregroundStyle(.white.opacity(0.45))
-        .frame(maxWidth: .infinity)
-        .frame(height: BundleLayout.handleHeight)
         .contentShape(Rectangle())
         .onTapGesture {
             onActivate()
