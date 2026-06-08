@@ -117,6 +117,27 @@ storage in v0.4.)
 
 Built together — interaction without storage means rewriting it anyway.
 
+### Handoff from v0.3 — wire these existing hooks
+v0.3 left explicit seams for the storage layer; pick them up here:
+- **Position persistence.** `BundleState.position` is already written on drag-end and
+  resize and read on first `show()` — but only in memory. Two `// v0.4: persist to
+  manifest.json here` markers in `BundlePanelController` (`handleDragEnded`, `applyResize`)
+  mark where to save. On launch, `BundleManager` loads each `manifest.json` and `show()`
+  restores the saved origin (off-screen recovery is v0.6).
+- **Bundle directory cleanup.** `BundleManager.deleteBundle` has a
+  `// v0.4: also delete the bundle's directory from disk here` TODO — wire it to remove
+  the UUID folder (send to Trash via `NSWorkspace.recycle`, consistent with v0.5).
+- **`CellState` is currently empty** (just an `id`). It needs content fields — type
+  (file/folder/image/text), stored filename, display name. Update `Models`.
+- **`BundleState.resize(...)` currently discards and rebuilds all cells.** Once cells
+  hold content, resize must **preserve** existing cell content (only add/remove trailing
+  slots), not wipe it. This is the one v0.3 method that needs reworking, not just extending.
+- **Geometry:** cell thumbnails/labels render inside the existing 64pt `CellView`
+  (`BundleLayout.cellSize`) — no panel-size math changes needed.
+- **Drag-out is NOT here (v0.5).** Note for then: files dragged *out* of
+  `~/Library/Application Support/` need `NSFilePromiseProvider`, not a raw `NSURL` drag
+  (raw URLs throw Finder error -8058). Dragging *in* (v0.4) has no such constraint.
+
 ### Cell interaction
 - One-click selects a cell — blue ring, all others deselect
 - Clicking empty space or another cell deselects
