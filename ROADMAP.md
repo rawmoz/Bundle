@@ -208,6 +208,13 @@ Shipped as part of v0.4 — see the "Move vs. delete semantics" and gotchas abov
 - `⌘⌥B` show/hide animated across all panels
 - Off-screen bundle recovery — auto-move to main display if saved position is outside all screen bounds
 - Empty state in popover when no bundles exist yet
+- **Reveal in Finder** — a menu item (bundle settings, and right-click on an occupied
+  cell) that opens that bundle's folder in Finder via
+  `NSWorkspace.activateFileViewerSelecting(...)`. The single seamless way for a user to
+  reach/recover their actual files without ever typing a path. **Path-agnostic by design:**
+  it reveals whatever folder `BundleStore` computes at runtime (`directory(for:)`), so it's
+  automatically correct per-user and whether the app is sandboxed (container path) or not
+  (clean `~/Library` path). Never hard-code the location.
 - Visual QA — corner radius, blur material, spacing, typography all consistent
 
 **Done when:** app feels polished enough to use daily.
@@ -219,3 +226,23 @@ Shipped as part of v0.4 — see the "Move vs. delete semantics" and gotchas abov
 - Horizontal grid orientation toggle
 - iCloud sync across Macs
 - Onboarding flow for first launch
+- Finder-friendly folder names — fold the bundle name into the on-disk folder as
+  `Name — shortUUID` (keep the UUID as the real key) instead of UUID-only. Optional nicety;
+  the "Reveal in Finder" item (v0.6) makes this largely unnecessary.
+
+## v1.0 — Distribution (decision pending, not yet planned)
+Getting it to other people. **No deployment plan was ever decided** — the sandbox is just
+the Xcode template default we discovered mid-v0.4, not a chosen strategy. Decide this once,
+before shipping; new users start fresh, so there's no data migration for *them* (only this
+dev machine's test bundles, which are throwaway).
+- **Pick a route:**
+  - **Mac App Store** — sandbox *required* (stays on); storage stays in the container forever
+    (fine — users never see it). Needs an Apple Developer account + App Store review.
+  - **Direct download** (site / GitHub release) — sandbox *optional*; turning it off gives
+    the clean `~/Library/Application Support/Bundle/` path automatically (code already uses
+    `FileManager`, no path is hard-coded). Needs Developer ID signing + **notarization** so
+    Gatekeeper doesn't block it.
+- **Either route needs an Apple Developer account ($99/yr).** Running it on your *own* Mac
+  is free forever; the fee is only for friction-free download by others.
+- If sandbox is turned off: write a one-time migration to move existing bundles out of the
+  container to the new path (matters only for dev/test data, not first-time users).
