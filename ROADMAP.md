@@ -221,6 +221,43 @@ Shipped as part of v0.4 — see the "Move vs. delete semantics" and gotchas abov
 
 ---
 
+## v0.7 — Cell rearrange (drag between cells)
+**Goal:** drag a cell's content onto another cell to move it — within a bundle or across
+bundles — without round-tripping through Finder.
+
+### Behavior
+- **Empty target → move:** content moves to the target cell; the source cell empties.
+- **Occupied target → swap:** the two cells exchange contents (never destroys anything).
+- Works **within a bundle and across bundles** (drag a cell from bundle A onto a cell in
+  bundle B).
+
+### Why it's additive, not a rewrite
+- This is an **internal** drag — it never leaves the app, so none of the external
+  drag machinery applies (no file promise, no -8058, no sandbox concerns).
+- The cell drag already exists (drag-out); we **also** register a private pasteboard
+  payload `(sourceBundleID, sourceIndex)` on it. A receiving cell checks for that payload
+  first and handles it internally; absent it, the existing file/image/text-from-outside
+  path runs unchanged. One drag serves both Finder-drop and cell-drop.
+- **Within a bundle:** no file I/O — just swap the two `CellState` entries in
+  `BundleState.cells` and save the manifest.
+- **Across bundles:** move the file from bundle A's folder to bundle B's folder (reuse
+  `BundleStore` copy/remove primitives) and update both manifests. `BundleManager` owns
+  every bundle, so it coordinates the A→B handoff in one place.
+- No window/ownership/storage-model changes. `BundleManager` stays the single source of truth.
+
+### Care points
+- The source cell must clear **only after** a confirmed internal drop (mirror the drag-out
+  rule), so a cancelled drag changes nothing.
+- A cross-bundle move is a real move (source bundle's file removed once the copy lands),
+  consistent with the move/delete semantics in v0.4.
+
+**Files likely touched:** `CellView`, `BundleGridView`, `BundleManager`, `BundleStore`
+
+**Done when:** dragging a cell onto another moves (empty) or swaps (occupied) its content,
+within and across bundles, with nothing lost on a cancelled drag.
+
+---
+
 ## Future / TBD
 - Context menu "More" items
 - Horizontal grid orientation toggle
