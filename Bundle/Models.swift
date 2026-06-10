@@ -1,9 +1,23 @@
 import Foundation
 import CoreGraphics
 
-// One cell in a bundle grid. Empty for now — content arrives in v0.4.
+// What kind of item a cell holds. The stored file lives in the bundle's UUID
+// directory; the manifest records which type so we pick the right thumbnail.
+enum CellContentType: String, Codable {
+    case file, folder, image, text
+}
+
+// One cell in a bundle grid. All content fields are nil when the cell is empty.
+// `storedFilename` is the item's name *within* the bundle directory (not a full
+// path); `displayName` is what shows under the thumbnail (filename, or the first
+// ~25 chars for plain text).
 struct CellState: Identifiable {
     let id = UUID()
+    var contentType: CellContentType?
+    var storedFilename: String?
+    var displayName: String?
+
+    var isEmpty: Bool { contentType == nil }
 }
 
 // A single bundle: a named grid of cells. Source of truth for one panel.
@@ -34,12 +48,19 @@ final class BundleState: Identifiable {
         self.cells = (0..<(columns * rows)).map { _ in CellState() }
     }
 
-    // Rebuild the cell grid for new dimensions. Cells are empty in v0.3 so this
-    // simply resizes; content preservation across a resize arrives with v0.4 storage.
+    // Resize the grid while preserving existing cell content. Cells are kept by
+    // index: growing appends empty trailing slots, shrinking drops trailing slots.
+    // A dropped slot's file is left on disk (orphaned, not deleted) so nothing is
+    // ever silently destroyed by a resize.
     func resize(columns: Int, rows: Int) {
+        let newCount = columns * rows
+        if newCount < cells.count {
+            cells = Array(cells.prefix(newCount))
+        } else if newCount > cells.count {
+            cells.append(contentsOf: (cells.count..<newCount).map { _ in CellState() })
+        }
         self.columns = columns
         self.rows = rows
-        self.cells = (0..<(columns * rows)).map { _ in CellState() }
     }
 }
 

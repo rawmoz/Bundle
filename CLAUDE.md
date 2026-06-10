@@ -55,18 +55,37 @@ Each cell holds one item. Thumbnail and name display underneath:
 | Plain text | Text document icon | First ~25 characters of content |
 
 ## Storage model
-One master folder lives at `~/Library/Application Support/Bundle/Bundles/`. Each BundlePanel gets its own subdirectory named by UUID. Files and folders dropped into a cell are **moved** (not copied) into that bundle's directory. Plain text is saved as a `.txt` file. A `manifest.json` per bundle tracks cell positions, display names, and metadata. If the app crashes, all content is safe on disk.
+One master `Bundles/` folder holds one UUID-named subdirectory per BundlePanel. Each holds
+a `manifest.json` (name, columns, rows, position, and an array of occupied cells → content
+type / stored filename / display name; empty cells omitted) plus the cell content files.
+The human bundle name lives in the manifest, **not** the folder name (names aren't unique,
+can be renamed, may contain illegal chars). Plain text is saved as a `.txt`. Every change
+writes the manifest immediately (tiny, atomic), so a crash never loses content.
 
+**The app is sandboxed**, so the real path is the container, not the plain `~/Library`:
 ```
-~/Library/Application Support/Bundle/
+~/Library/Containers/com.danielramos.Bundle/Data/Library/Application Support/Bundle/
   Bundles/
     [bundle-uuid]/
       manifest.json
       [cell content files and folders]
-    [bundle-uuid]/
-      manifest.json
-      [cell content files and folders]
 ```
+`FileManager`'s app-support URL resolves to this container automatically — code uses that,
+never a hard-coded path.
+
+### Move vs. delete semantics
+A **move** relocates bytes (the leftover copy is redundant → removed permanently). A
+**delete** destroys content with no destination → goes to the **Trash** (recoverable).
+- **Drag in** = move: `moveItem` the source into the bundle. If the sandbox blocks the
+  rename, copy in then permanently `removeItem` the source (Trash only as a last resort).
+- **Drag out** = move: deliver to the drop destination, then permanently delete the
+  bundle's copy.
+- **Paste (⌘V)** = copy — the clipboard only lends a reference, source left untouched.
+- **Right-click Delete Content / Delete Bundle / shrink-grid drop** = **Trash**.
+
+Requires the **`files.user-selected.read-write`** entitlement to remove a dragged-in file
+from its source — declared in an explicit `Bundle/Bundle.entitlements` (the
+`ENABLE_USER_SELECTED_FILES = readwrite` build setting silently emitted *read-only*).
 
 ## Hotkey behavior
 `⌘⌥B` toggles ALL bundles simultaneously — one press shows all, next press hides all.
@@ -119,8 +138,31 @@ No Accessibility permissions required. Works in sandboxed apps.
 - **Rename text field needs a key window.** Borderless panels can't become key by default, so `BundlePanelController` uses a `KeyablePanel: NSPanel` subclass overriding `canBecomeKey`. `.nonactivatingPanel` means becoming key doesn't activate the app or steal focus.
 - **Position is in-memory only in v0.3.** `BundleState.position` is written on drag-end and resize and read on first `show()`, but there's no disk layer yet and bundles don't survive relaunch — see "Storage model" / v0.4. Two `// v0.4: persist to manifest.json here` markers in `BundlePanelController` flag where the save goes.
 
-### State ownership (v0.2)
-`AppCoordinator` is gone. `BundleManager` (`@Observable`, held as `@State` in `BundleApp`) is the single source of truth — it owns every `BundleState`, the matching `BundlePanelController` keyed by UUID, and the `HotkeyManager`. `createBundle` builds the state, spins up a controller, and shows it. `toggleAll` shows/hides every panel together. Persistence still pending (v0.4) — bundles are in-memory only.
+### Cell interaction & storage (v0.4)
+- **`BundleStore`** owns all disk I/O and the `manifest.json` format. **`SelectionStore`**
+  (`@Observable`) tracks the single app-wide selected cell — transient, never persisted.
+- **Selection / keyboard:** clicking a cell selects it (blue ring) and makes its panel key;
+  a local `NSEvent` keyDown monitor in `BundleManager` then routes `⌘V`/`⌘C` to it. The
+  panel resigning key (click desktop / another app) clears the selection, guarded so
+  selecting a cell in another bundle doesn't wipe the new selection.
+- **Drag-IN file detection reads the file URL off the drag pasteboard**
+  (`NSPasteboard(name: .drag)`), NOT item-provider type loading. PDFs expose
+  `public.file-url` but image files often don't, so item-provider approaches saved a copy
+  and never removed the original. `loadInPlaceFileRepresentation` surfaced the file but
+  leaked a `.tmp` staging folder in the sandbox — both rejected.
+- **Drag-OUT uses a file promise** (`NSItemProvider.registerFileRepresentation`), not a raw
+  `NSURL` drag — dragging a URL out of the sandbox container throws Finder error -8058. The
+  promise's load handler fires only on an accepted drop, so a cancelled drag clears nothing;
+  on success it's a move (bundle copy permanently deleted via `moveOutContent`).
+- **`resize` preserves cell content by index** (grow appends empty trailing slots, shrink
+  trims). The grid guards `if index < bundle.cells.count` to survive the resize transition
+  (fixed an out-of-bounds crash). Shrinking that would drop *filled* cells shows a confirm
+  alert; confirming trashes those files.
+- `BundleStore.ingest` runs `nonisolated` static helpers (`uniqueName`) since file ops may
+  run off the main actor; the rest of the store is main-actor by default isolation.
+
+### State ownership (v0.2, persistence added v0.4)
+`AppCoordinator` is gone. `BundleManager` (`@Observable`, held as `@State` in `BundleApp`) is the single source of truth — it owns every `BundleState`, the matching `BundlePanelController` keyed by UUID, the `HotkeyManager`, the `SelectionStore`, and the `BundleStore`. `createBundle` builds the state, spins up a controller, shows it, and saves; on launch it loads every `manifest.json` and restores positions. `toggleAll` shows/hides every panel together.
 
 ### Menu bar popover (v0.2)
 `MenuBarExtra` uses `.menuBarExtraStyle(.window)` so the popover hosts a real SwiftUI view (`MenuBarView`) with a `NavigationStack`. Home → "Add new bundle" pushes the creation page (name field + a table-insert-style `GridSizePicker`, 1×1 up to 5×5). `.window` style has no official dismiss API; after Create we call `NSApp.keyWindow?.close()` to collapse the popover.
