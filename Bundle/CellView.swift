@@ -9,12 +9,16 @@ struct CellView: View {
     let cell: CellState
     let isSelected: Bool
     let contentURL: URL?
+    let bundleID: UUID   // this cell's bundle + index, tagged onto an internal drag
+    let index: Int       // so a drop onto another cell becomes a move/swap
 
     var onSelect: () -> Void
     var onDropProviders: ([NSItemProvider]) -> Bool
     var onPaste: () -> Void
     var onDelete: () -> Void
     var onDragOut: () -> Void   // drop was accepted elsewhere — remove from this cell
+    var onBeginDrag: () -> Void // this cell's drag started — record it as the source
+    var onOpen: () -> Void      // double-click — open the content in its default app
 
     @State private var isTargeted = false
 
@@ -34,8 +38,11 @@ struct CellView: View {
         }
         .frame(width: BundleLayout.cellSize, height: BundleLayout.cellSize)
         .contentShape(Rectangle())
+        // Double-click opens an occupied cell's content; single-click selects. The
+        // count: 2 gesture must come first so a double-click isn't swallowed as a tap.
+        .onTapGesture(count: 2) { if !cell.isEmpty { onOpen() } }
         .onTapGesture { onSelect() }
-        .onDrop(of: [.fileURL, .image, .text], isTargeted: $isTargeted) { onDropProviders($0) }
+        .onDrop(of: [.bundleCell, .fileURL, .image, .text], isTargeted: $isTargeted) { onDropProviders($0) }
         .contextMenu {
             if cell.isEmpty {
                 Button("Paste") { onPaste() }
@@ -59,7 +66,10 @@ struct CellView: View {
                     RoundedRectangle(cornerRadius: 9)
                         .strokeBorder(ringColor, lineWidth: isSelected ? 2.5 : 0)
                 )
-                .onDrag { dragProvider() }
+                .onDrag {
+                    onBeginDrag()       // record this cell as the drag source
+                    return dragProvider()
+                }
         }
     }
 
@@ -93,6 +103,17 @@ struct CellView: View {
                 completion(url, false, nil)             // fallback: copy-out, keep the cell
             }
             return nil
+        }
+        // Also tag the drag with this cell's identity so a drop onto another cell is
+        // handled internally as a move/swap. .ownProcess keeps it out of Finder, where
+        // the file promise above is what counts.
+        if let data = try? JSONEncoder().encode(CellDragPayload(bundleID: bundleID, index: index)) {
+            provider.registerDataRepresentation(
+                forTypeIdentifier: UTType.bundleCell.identifier, visibility: .ownProcess
+            ) { completion in
+                completion(data, nil)
+                return nil
+            }
         }
         return provider
     }

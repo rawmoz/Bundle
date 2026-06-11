@@ -142,6 +142,21 @@ final class BundleStore {
         }
     }
 
+    // Move a content file from one bundle's folder to another's (internal cell
+    // rearrange across bundles). Both folders live in our container, so a plain
+    // moveItem works — no sandbox -8058 concern, no Trash. Returns the new filename,
+    // uniquified against the destination folder.
+    func moveContentBetweenBundles(filename: String, from sourceID: UUID, to destID: UUID) -> String? {
+        let srcURL = contentFileURL(for: sourceID, filename: filename)
+        guard fm.fileExists(atPath: srcURL.path) else { return nil }
+        let destDir = directory(for: destID)
+        try? fm.createDirectory(at: destDir, withIntermediateDirectories: true)
+        let newName = Self.uniqueName(filename, in: destDir)
+        let destURL = destDir.appendingPathComponent(newName)
+        do { try fm.moveItem(at: srcURL, to: destURL); return newName }
+        catch { return nil }
+    }
+
     // Save a pasted/dropped image as PNG. Returns the stored filename.
     func saveImage(_ image: NSImage, into id: UUID) -> String? {
         guard let tiff = image.tiffRepresentation,

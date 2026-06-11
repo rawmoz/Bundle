@@ -225,9 +225,13 @@ in Finder, and a first-launch popover isn't empty-looking.
 
 ---
 
-## v0.7 — Cell rearrange (drag between cells)
+## v0.7 — Cell rearrange (drag between cells) ✅ (2026-06-11)
 **Goal:** drag a cell's content onto another cell to move it — within a bundle or across
 bundles — without round-tripping through Finder.
+
+**Double-click to open shipped here too** — double-clicking an occupied cell opens its
+content in the default app via `NSWorkspace.open` (single-click still selects; the
+`count: 2` tap gesture is ordered before the `count: 1` one so it isn't swallowed).
 
 ### Behavior
 - **Empty target → move:** content moves to the target cell; the source cell empties.
@@ -238,27 +242,40 @@ bundles — without round-tripping through Finder.
 ### Why it's additive, not a rewrite
 - This is an **internal** drag — it never leaves the app, so none of the external
   drag machinery applies (no file promise, no -8058, no sandbox concerns).
-- The cell drag already exists (drag-out); we **also** register a private pasteboard
-  payload `(sourceBundleID, sourceIndex)` on it. A receiving cell checks for that payload
-  first and handles it internally; absent it, the existing file/image/text-from-outside
-  path runs unchanged. One drag serves both Finder-drop and cell-drop.
-- **Within a bundle:** no file I/O — just swap the two `CellState` entries in
-  `BundleState.cells` and save the manifest.
-- **Across bundles:** move the file from bundle A's folder to bundle B's folder (reuse
-  `BundleStore` copy/remove primitives) and update both manifests. `BundleManager` owns
-  every bundle, so it coordinates the A→B handoff in one place.
-- No window/ownership/storage-model changes. `BundleManager` stays the single source of truth.
+- **Within a bundle:** no file I/O — just `swapAt` the two `CellState` entries in
+  `BundleState.cells` and save the manifest (covers both move-onto-empty and swap).
+- **Across bundles:** `BundleStore.moveContentBetweenBundles` relocates the file from
+  bundle A's folder to bundle B's (plain `moveItem` — both are in our container) and both
+  manifests are updated. `BundleManager` owns every bundle, so it coordinates A→B in one
+  place. No window/ownership/storage-model changes; `BundleManager` stays the source of truth.
 
-### Care points
-- The source cell must clear **only after** a confirmed internal drop (mirror the drag-out
-  rule), so a cancelled drag changes nothing.
-- A cross-bundle move is a real move (source bundle's file removed once the copy lands),
-  consistent with the move/delete semantics in v0.4.
+### Implementation note — the plan's pasteboard payload did NOT work
+The original plan was to tag the drag with a private `(bundleID, index)` pasteboard
+payload and read it back on drop. **This failed:** SwiftUI hands the drop an **empty
+`NSItemProvider`** for in-app drags — `registeredTypeIdentifiers` comes back `[]`, so the
+payload can't be read off either the provider or the drag pasteboard (the representation
+is lazy). The drag pasteboard *does* advertise the type (so `.onDrop` still fires and
+highlights), but the bytes never arrive.
+**What works instead:** record the source cell **in memory** (`BundleManager.pendingCellDrag`)
+the moment its drag begins (the `.onDrag` closure runs at drag start, wired through
+`onBeginDragCell`). On drop, if `pendingCellDrag` is set *and* there's no real Finder file
+in the drag (`dragFileURL() == nil`, so an external file always wins), it's an internal
+rearrange. `pendingCellDrag` is cleared on every drop and on drag-out, and overwritten at
+each new drag start, so a cancelled drag can't hijack a later external drop. A `.bundleCell`
+`UTType` (exported at runtime) is still registered/accepted — only so the drop *fires*; the
+in-memory value does the real work.
 
-**Files likely touched:** `CellView`, `BundleGridView`, `BundleManager`, `BundleStore`
+### Care points (met)
+- The source cell clears **only** inside the target's drop handler — a cancelled drag
+  changes nothing.
+- A cross-bundle move is a real move (source file removed once it lands), consistent with
+  the move/delete semantics in v0.4.
 
-**Done when:** dragging a cell onto another moves (empty) or swaps (occupied) its content,
-within and across bundles, with nothing lost on a cancelled drag.
+**Files touched:** `Models` (`CellDragPayload`, `UTType.bundleCell`), `CellView`,
+`BundleGridView`, `BundlePanelController`, `BundleManager`, `BundleStore`.
+
+**Done when:** ✅ dragging a cell onto another moves (empty) or swaps (occupied) its
+content, within and across bundles, with nothing lost on a cancelled drag.
 
 ---
 

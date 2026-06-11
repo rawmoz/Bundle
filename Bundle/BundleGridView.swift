@@ -16,6 +16,8 @@ struct BundleGridView: View {
     var onPasteCell: (Int) -> Void              // right-click Paste into cell `Int`
     var onDeleteCell: (Int) -> Void             // right-click Delete content of cell `Int`
     var onDragOutCell: (Int) -> Void            // cell `Int` was dragged out — clear it
+    var onBeginDragCell: (Int) -> Void          // cell `Int`'s drag began — record source
+    var onOpenCell: (Int) -> Void               // cell `Int` double-clicked — open content
 
     @State private var showingSettings = false
 
@@ -91,6 +93,8 @@ struct BundleGridView: View {
                                 cell: bundle.cells[index],
                                 isSelected: selection.isSelected(bundleID: bundle.id, index: index),
                                 contentURL: cellURL(bundle.cells[index]),
+                                bundleID: bundle.id,
+                                index: index,
                                 onSelect: {
                                     selection.select(bundleID: bundle.id, index: index)
                                     onActivate()   // make the panel key so ⌘V/⌘C reach it
@@ -98,7 +102,9 @@ struct BundleGridView: View {
                                 onDropProviders: { onDropCell(index, $0) },
                                 onPaste: { onPasteCell(index) },
                                 onDelete: { onDeleteCell(index) },
-                                onDragOut: { onDragOutCell(index) }
+                                onDragOut: { onDragOutCell(index) },
+                                onBeginDrag: { onBeginDragCell(index) },
+                                onOpen: { onOpenCell(index) }
                             )
                         }
                     }

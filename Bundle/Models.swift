@@ -1,10 +1,25 @@
 import Foundation
 import CoreGraphics
+import UniformTypeIdentifiers
 
 // What kind of item a cell holds. The stored file lives in the bundle's UUID
 // directory; the manifest records which type so we pick the right thumbnail.
 enum CellContentType: String, Codable {
     case file, folder, image, text
+}
+
+// Private drag payload identifying which cell a drag started from, so a drop onto
+// another cell can be handled as an internal move/swap. The app generates its
+// Info.plist, so there's no declared type to reference — we export one at runtime.
+// Carried at .ownProcess visibility: Finder never sees it, and drag-OUT still uses
+// the separate file promise on the same drag.
+extension UTType {
+    static let bundleCell = UTType(exportedAs: "com.danielramos.Bundle.cell")
+}
+
+struct CellDragPayload: Codable {
+    let bundleID: UUID
+    let index: Int
 }
 
 // One cell in a bundle grid. All content fields are nil when the cell is empty.

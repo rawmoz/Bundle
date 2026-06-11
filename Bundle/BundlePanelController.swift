@@ -68,7 +68,9 @@ final class BundlePanelController {
             },
             onPasteCell: { [weak manager] index in manager?.paste(into: bundle, index: index) },
             onDeleteCell: { [weak manager] index in manager?.deleteContent(bundle: bundle, index: index) },
-            onDragOutCell: { [weak manager] index in manager?.moveOutContent(bundle: bundle, index: index) }
+            onDragOutCell: { [weak manager] index in manager?.moveOutContent(bundle: bundle, index: index) },
+            onBeginDragCell: { [weak manager] index in manager?.beginCellDrag(bundle: bundle, index: index) },
+            onOpenCell: { [weak manager] index in manager?.openContent(bundle: bundle, index: index) }
         )
         hosting = NSHostingView(rootView: view)
         hosting.frame = NSRect(origin: .zero, size: size)

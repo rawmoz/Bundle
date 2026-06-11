@@ -36,6 +36,11 @@ Selects the cell (blue ring). A selected cell can:
 - Receive a paste (`⌘V`) — file, folder, image, or plain text from clipboard
 - Receive a drag — drag any content directly into the cell
 - Be copied from — `⌘C` copies the cell's content back to clipboard
+- Be rearranged — drag an occupied cell onto another cell to **move** (empty target) or
+  **swap** (occupied target), within a bundle or across bundles — see v0.7
+
+**Double-click**
+Opens an occupied cell's content in its default app (`NSWorkspace.open`), like Finder.
 - Be navigated from — **arrow keys** move the selection around the grid (full 2D, edge-
   stops, no wrap) — see v0.8
 - Be previewed — **spacebar** opens a native macOS Quick Look preview of an occupied cell's
@@ -165,6 +170,22 @@ No Accessibility permissions required. Works in sandboxed apps.
   alert; confirming trashes those files.
 - `BundleStore.ingest` runs `nonisolated` static helpers (`uniqueName`) since file ops may
   run off the main actor; the rest of the store is main-actor by default isolation.
+
+### Cell rearrange & double-click open (v0.7)
+- **Internal cell→cell drag** moves (empty target) or swaps (occupied target) content,
+  within a bundle (`cells.swapAt`, no file I/O) or across bundles
+  (`BundleStore.moveContentBetweenBundles` — plain `moveItem`, both folders are in our
+  container, so no -8058 / sandbox concern).
+- **The source can't travel on the drag.** SwiftUI delivers an **empty `NSItemProvider`**
+  for in-app drags (`registeredTypeIdentifiers == []`), so the planned pasteboard payload
+  was unreadable. Instead the source cell is recorded **in memory**
+  (`BundleManager.pendingCellDrag`) when its `.onDrag` fires (`onBeginDragCell`); the drop
+  reads it. Guarded by `dragFileURL() == nil` so a real Finder file always wins, and
+  cleared on every drop / drag-out / new drag start so a cancelled drag can't hijack a
+  later drop. A runtime-exported `.bundleCell` `UTType` is still registered + accepted by
+  `.onDrop` — only so the drop *fires* for an internal drag; the in-memory value does the work.
+- **Double-click** an occupied cell → `BundleManager.openContent` opens it in the default
+  app. The `count: 2` tap gesture is ordered **before** the `count: 1` select gesture.
 
 ### State ownership (v0.2, persistence added v0.4)
 `AppCoordinator` is gone. `BundleManager` (`@Observable`, held as `@State` in `BundleApp`) is the single source of truth — it owns every `BundleState`, the matching `BundlePanelController` keyed by UUID, the `HotkeyManager`, the `SelectionStore`, and the `BundleStore`. `createBundle` builds the state, spins up a controller, shows it, and saves; on launch it loads every `manifest.json` and restores positions. `toggleAll` shows/hides every panel together.

@@ -15,6 +15,11 @@ final class BundleManager {
     private let store = BundleStore()
     private var keyMonitor: Any?
 
+    // The cell an in-app drag started from, recorded at drag start so a drop onto
+    // another cell can be resolved as an internal move/swap (SwiftUI hands the drop an
+    // empty item provider for in-app drags, so the source can't travel on the drag).
+    private var pendingCellDrag: CellDragPayload?
+
     init() {
         hotkeyManager.onToggle = { [weak self] in self?.toggleAll() }
         hotkeyManager.register()
@@ -62,6 +67,13 @@ final class BundleManager {
     // Open the folder where all bundle files live in Finder.
     func revealBundlesFolder() {
         NSWorkspace.shared.open(store.bundlesURL)
+    }
+
+    // Open an occupied cell's content in its default app (double-click, like Finder).
+    func openContent(bundle: BundleState, index: Int) {
+        guard index < bundle.cells.count,
+              let filename = bundle.cells[index].storedFilename else { return }
+        NSWorkspace.shared.open(store.contentFileURL(for: bundle.id, filename: filename))
     }
 
     // The on-disk URL backing an occupied cell, for thumbnails and copy-out.
@@ -124,17 +136,37 @@ final class BundleManager {
     // Drag-out completed: the file now lives at the drop destination, so this is a move —
     // permanently remove the bundle's now-redundant copy and empty the cell.
     func moveOutContent(bundle: BundleState, index: Int) {
+        pendingCellDrag = nil   // this drag left the app; it isn't an internal rearrange
         guard index < bundle.cells.count, let filename = bundle.cells[index].storedFilename else { return }
         store.deleteContentFile(filename, bundleID: bundle.id)
         clearCell(bundle, index)
+    }
+
+    // Record the cell an in-app drag started from (see pendingCellDrag / drop).
+    func beginCellDrag(bundle: BundleState, index: Int) {
+        pendingCellDrag = CellDragPayload(bundleID: bundle.id, index: index)
     }
 
     // Handle a drag-in. Files are moved (drag-in ownership); images/text are written.
     // Loading is async, so the actual fill happens on the main queue after this returns.
     @discardableResult
     func drop(providers: [NSItemProvider], into bundle: BundleState, index: Int) -> Bool {
-        guard index < bundle.cells.count, bundle.cells[index].isEmpty else { return false }
-        guard !providers.isEmpty else { return false }
+        guard index < bundle.cells.count else { return false }
+
+        // An internal cell→cell drag takes precedence: move (empty target) or swap
+        // (occupied target). SwiftUI delivers an empty NSItemProvider for in-app drags,
+        // so we can't read the source off the provider — instead the source cell is
+        // recorded in memory when its drag begins (beginCellDrag). A real Finder file
+        // always wins, so a stale value left by a cancelled drag can't hijack an
+        // external drop.
+        if let payload = pendingCellDrag, Self.dragFileURL() == nil {
+            pendingCellDrag = nil
+            return rearrange(from: payload, toBundle: bundle, toIndex: index)
+        }
+        pendingCellDrag = nil
+
+        // External content only ever fills an empty cell.
+        guard bundle.cells[index].isEmpty, !providers.isEmpty else { return false }
 
         // A real file on disk (any type, images included) → move it: copy into the
         // bundle, then Trash the original. We read the file URL straight off the drag
@@ -226,6 +258,73 @@ final class BundleManager {
         bundle.cells[index].storedFilename = nil
         bundle.cells[index].displayName = nil
         save(bundle)
+    }
+
+    // Set a cell's content from explicit fields (used when relocating content between
+    // cells, where the source's type/display are carried over with a new filename).
+    private func setCell(_ bundle: BundleState, _ index: Int,
+                         type: CellContentType?, filename: String, display: String?) {
+        guard index < bundle.cells.count else { return }
+        bundle.cells[index].contentType = type
+        bundle.cells[index].storedFilename = filename
+        bundle.cells[index].displayName = display
+        save(bundle)
+    }
+
+    // MARK: - Cell rearrange (internal drag between cells)
+
+    // Handle an internal cell→cell drop. Empty target → move; occupied target → swap.
+    // Within a bundle it's a pure slot swap (the files already live in that folder);
+    // across bundles the backing files are physically moved between the two folders.
+    // The source cell is only touched here, inside the target's drop handler, so a
+    // cancelled drag changes nothing.
+    @discardableResult
+    private func rearrange(from payload: CellDragPayload, toBundle dest: BundleState, toIndex: Int) -> Bool {
+        guard let source = bundles.first(where: { $0.id == payload.bundleID }),
+              payload.index < source.cells.count,
+              toIndex < dest.cells.count,
+              !source.cells[payload.index].isEmpty else { return false }
+
+        // Dropping a cell onto itself is a no-op.
+        if source.id == dest.id, payload.index == toIndex { return true }
+
+        if source.id == dest.id {
+            // Same bundle: files already live here, so just swap the two slots. swapAt
+            // covers both cases — empty target moves the content, occupied target swaps.
+            dest.cells.swapAt(payload.index, toIndex)
+            save(dest)
+        } else if !moveBetweenBundles(source: source, sourceIndex: payload.index,
+                                      dest: dest, destIndex: toIndex) {
+            return false
+        }
+
+        selection.clear()   // the moved content's index changed — drop the stale ring
+        return true
+    }
+
+    // Move/swap content across two bundles by relocating the backing files between
+    // their folders, then updating both manifests. A real move (the source file is
+    // gone once it lands), consistent with the drag-in/out semantics.
+    private func moveBetweenBundles(source: BundleState, sourceIndex: Int,
+                                    dest: BundleState, destIndex: Int) -> Bool {
+        let s = source.cells[sourceIndex]
+        let t = dest.cells[destIndex]
+        guard let sFile = s.storedFilename else { return false }
+
+        if t.isEmpty {
+            guard let newName = store.moveContentBetweenBundles(
+                filename: sFile, from: source.id, to: dest.id) else { return false }
+            setCell(dest, destIndex, type: s.contentType, filename: newName, display: s.displayName)
+            clearCell(source, sourceIndex)
+        } else {
+            guard let tFile = t.storedFilename,
+                  let newS = store.moveContentBetweenBundles(filename: sFile, from: source.id, to: dest.id),
+                  let newT = store.moveContentBetweenBundles(filename: tFile, from: dest.id, to: source.id)
+            else { return false }
+            setCell(dest, destIndex, type: s.contentType, filename: newS, display: s.displayName)
+            setCell(source, sourceIndex, type: t.contentType, filename: newT, display: t.displayName)
+        }
+        return true
     }
 
     // MARK: - Keyboard
