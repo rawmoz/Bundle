@@ -200,14 +200,16 @@ Shipped as part of v0.4 — see the "Move vs. delete semantics" and gotchas abov
 
 ---
 
-## v0.6 — Polish & animations
-**Goal:** the app feels premium and complete.
+## v0.6 — Robustness & Reveal in Finder
+**Goal:** close the functional gaps that make the app safe and complete to use daily —
+no cosmetics. (Animations and the visual-consistency pass were split out to **v0.9**: it's
+wasted effort to polish UI and freeze typography/spacing while v0.7/v0.8 are still adding
+interactions. Polish lands once the feature set is frozen.)
 
-- Bundle panel appear/disappear animation (fade or subtle scale)
-- Cell fill and clear animations
-- `⌘⌥B` show/hide animated across all panels
-- Off-screen bundle recovery — auto-move to main display if saved position is outside all screen bounds
-- Empty state in popover when no bundles exist yet
+- **Off-screen bundle recovery** — on launch, if a bundle's saved position falls outside
+  all current screen bounds (e.g. an external display was disconnected), auto-move it onto
+  the main display so it's never stranded where the user can't reach it. A robustness fix,
+  not a nicety.
 - **Reveal in Finder** — a menu item (bundle settings, and right-click on an occupied
   cell) that opens that bundle's folder in Finder via
   `NSWorkspace.activateFileViewerSelecting(...)`. The single seamless way for a user to
@@ -215,9 +217,11 @@ Shipped as part of v0.4 — see the "Move vs. delete semantics" and gotchas abov
   it reveals whatever folder `BundleStore` computes at runtime (`directory(for:)`), so it's
   automatically correct per-user and whether the app is sandboxed (container path) or not
   (clean `~/Library` path). Never hard-code the location.
-- Visual QA — corner radius, blur material, spacing, typography all consistent
+- **Empty state in the popover** — when no bundles exist yet, the menu-bar popover shows a
+  friendly prompt instead of a bare list.
 
-**Done when:** app feels polished enough to use daily.
+**Done when:** a disconnected display never strands a bundle, users can jump to their files
+in Finder, and a first-launch popover isn't empty-looking.
 
 ---
 
@@ -316,6 +320,22 @@ move helper, optional). **Files likely introduced:** a `QuickLookController`
 **Done when:** with a cell selected, the arrow keys move the blue ring around the grid and
 stop at every edge, and space opens (and re-closes) a native Quick Look preview of an
 occupied cell's content.
+
+---
+
+## v0.9 — Polish & animations
+**Goal:** make the app *feel* premium and finished — the do-last pass, deliberately
+scheduled after the feature set is frozen (v0.6–v0.8). Doing this earlier means re-polishing
+every time a new interaction lands, so it waits until there's nothing left to add.
+
+- Bundle panel appear/disappear animation (fade or subtle scale)
+- Cell fill and clear animations
+- `⌘⌥B` show/hide animated across all panels
+- Visual QA pass — corner radius, blur material, spacing, typography all consistent across
+  every surface (panels, cells, popover, settings). Worth doing exactly once, here, when no
+  new UI is coming.
+
+**Done when:** the app feels polished enough to use daily and nothing looks unfinished.
 
 ---
 
