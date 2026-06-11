@@ -3,24 +3,31 @@ import SwiftUI
 
 struct MenuBarView: View {
     let manager: BundleManager
-    @State private var path = NavigationPath()
+    @State private var showingCreate = false
 
     var body: some View {
-        NavigationStack(path: $path) {
-            HomeMenu(manager: manager) { path.append(CreateRoute()) }
-                .navigationDestination(for: CreateRoute.self) { _ in
-                    CreateBundleView(manager: manager) {
-                        path = NavigationPath()
+        Group {
+            if showingCreate {
+                CreateBundleView(
+                    manager: manager,
+                    onCancel: { showingCreate = false },
+                    onCreate: {
+                        showingCreate = false
                         dismissPopover()
                     }
-                }
+                )
+            } else {
+                HomeMenu(manager: manager) { showingCreate = true }
+            }
         }
-        .frame(width: 240)
+        // Lock the popover to one fixed size — tall enough for the create form with the
+        // full 5×5 grid picker. MenuBarExtra(.window) only ever grows its window to fit
+        // content and never shrinks back; by never letting the size change, that bug can't
+        // fire and there's no oversized window background peeking out as a second frame.
+        // Pages top-align so the shorter home menu's spare room sits at the bottom.
+        .frame(width: 240, height: 330, alignment: .top)
     }
 }
-
-// Marker route so NavigationStack can push the creation page.
-private struct CreateRoute: Hashable {}
 
 private struct HomeMenu: View {
     let manager: BundleManager
@@ -40,6 +47,7 @@ private struct HomeMenu: View {
 
 private struct CreateBundleView: View {
     let manager: BundleManager
+    var onCancel: () -> Void
     var onCreate: () -> Void
 
     @State private var name = ""
@@ -48,8 +56,14 @@ private struct CreateBundleView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("New Bundle")
-                .font(.headline)
+            HStack(spacing: 8) {
+                Button(action: onCancel) {
+                    Image(systemName: "chevron.left")
+                        .font(.headline)
+                }
+                .buttonStyle(.plain)
+                Text("New Bundle").font(.headline)
+            }
 
             TextField("Bundle name", text: $name)
                 .textFieldStyle(.roundedBorder)
@@ -63,7 +77,6 @@ private struct CreateBundleView: View {
             .buttonStyle(.borderedProminent)
         }
         .padding(16)
-        .navigationTitle("New Bundle")
     }
 
     private func create() {
