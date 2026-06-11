@@ -258,6 +258,67 @@ within and across bundles, with nothing lost on a cancelled drag.
 
 ---
 
+## v0.8 — Keyboard navigation & Quick Look preview
+**Goal:** drive a selected cell entirely from the keyboard — move the selection with the
+arrow keys, and hit space to preview the cell's content exactly like Finder.
+
+Both features hang off the **same insertion point**: the local `NSEvent` keyDown monitor in
+`BundleManager` (`installKeyboardMonitor`) that already routes `⌘V`/`⌘C` to the selected
+cell. Selecting a cell makes its panel key, so the monitor fires; these are two more
+branches in it. Today that monitor guards on `.command` — it must be restructured so
+modifier-less keys (arrows, space) are also handled.
+
+### Arrow-key navigation
+- With a cell selected, the arrow keys move the selection within that bundle's grid:
+  - **Up** = `index - columns`, **Down** = `index + columns` (the grid is a flat array, so
+    one row is a single column-stride).
+  - **Left** = `index - 1`, **Right** = `index + 1`, with row-boundary edge-stops so Left
+    on the first column and Right on the last column don't wrap into the adjacent row.
+- **Full 2D, all four arrows** — chosen so every cell is reachable in any grid (up/down
+  alone leaves the other columns of a multi-column grid unreachable).
+- **Edge-stop:** a move that would leave the grid is ignored (Up when `index < columns`,
+  Down when `index + columns >= cells.count`, Left/Right at the row edges). The selection
+  simply stays put — no wrap, no beep.
+
+### Why it's additive, not a rewrite
+- Pure selection math — no file I/O, no persistence, no panel changes, no new frameworks.
+- It only calls `selection.select(bundleID:index:)`; the blue ring moves. Selection is
+  already a single app-wide index (`SelectionStore`), and `columns`/`rows` already live on
+  `BundleState`, so the move is computed from data we already hold.
+
+### Spacebar Quick Look preview
+- With an **occupied** cell selected, **space** opens the native macOS Quick Look preview
+  of that cell's file — the floating mini-window for PDFs, images, folders, and text, byte-
+  for-byte the Finder-spacebar behavior. Space again **toggles it closed** (native).
+- Space on an **empty** cell does nothing (event swallowed so the system doesn't beep).
+- We already hold the real on-disk URL for any occupied cell
+  (`BundleManager.contentURL(for:cell:)`); Quick Look just needs that URL via a small
+  data-source object. All four content types preview natively — `.txt` for text, the image,
+  the folder's large icon, the PDF/doc — matching Finder.
+
+### Care points
+- **Quick Look from an accessory app is the one real unknown.** The app is a menu-bar
+  `LSUIElement` with **borderless, non-activating** panels. `QLPreviewPanel` normally drives
+  itself through the responder chain (`acceptsPreviewPanelControl`), which assumes a
+  conventional key-window app. Expect to **present and manage the panel manually** (set its
+  `dataSource` directly, `makeKeyAndOrderFront`) rather than relying on the responder chain.
+  Known-solvable, but validate it first — this is the v0.8 equivalent of the -8058 gotcha.
+- Restructuring the keyDown monitor must not regress `⌘V`/`⌘C`: keep the command branch and
+  add the modifier-less arrow/space branches alongside it, all still guarded by "a cell is
+  selected."
+- No storage, model, or window-ownership changes. `BundleManager` stays the single source
+  of truth and keeps owning keyboard routing.
+
+**Files likely touched:** `BundleManager` (monitor), `SelectionStore` or `Models` (a small
+move helper, optional). **Files likely introduced:** a `QuickLookController`
+(`QLPreviewPanelDataSource`/`Delegate`).
+
+**Done when:** with a cell selected, the arrow keys move the blue ring around the grid and
+stop at every edge, and space opens (and re-closes) a native Quick Look preview of an
+occupied cell's content.
+
+---
+
 ## Future / TBD
 - Context menu "More" items
 - Horizontal grid orientation toggle

@@ -36,6 +36,10 @@ Selects the cell (blue ring). A selected cell can:
 - Receive a paste (`⌘V`) — file, folder, image, or plain text from clipboard
 - Receive a drag — drag any content directly into the cell
 - Be copied from — `⌘C` copies the cell's content back to clipboard
+- Be navigated from — **arrow keys** move the selection around the grid (full 2D, edge-
+  stops, no wrap) — see v0.8
+- Be previewed — **spacebar** opens a native macOS Quick Look preview of an occupied cell's
+  content, toggling closed on a second press — see v0.8
 
 **Right-click on empty cell**
 - Paste
@@ -101,6 +105,7 @@ Translucent frosted glass panels — Apple premium aesthetic. Rounded corners, d
 - **SwiftUI** — UI layer
 - **AppKit** — window management, floating NSPanels
 - **NSWorkspace** — native file icons and image thumbnails
+- **QuickLook** — native spacebar preview of cell content (`QLPreviewPanel`, v0.8)
 - **Carbon** — global hotkey registration (`⌘⌥B`)
 - **Xcode** — IDE and build tool
 - **GitHub** — version control (`github.com/rawmoz/Bundle`)
