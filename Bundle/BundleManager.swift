@@ -59,6 +59,11 @@ final class BundleManager {
         store.save(bundle)
     }
 
+    // Open the folder where all bundle files live in Finder.
+    func revealBundlesFolder() {
+        NSWorkspace.shared.open(store.bundlesURL)
+    }
+
     // The on-disk URL backing an occupied cell, for thumbnails and copy-out.
     func contentURL(for bundle: BundleState, cell: CellState) -> URL? {
         guard let filename = cell.storedFilename else { return nil }

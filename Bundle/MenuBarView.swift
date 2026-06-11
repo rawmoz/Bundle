@@ -16,7 +16,6 @@ struct MenuBarView: View {
                 }
         }
         .frame(width: 240)
-        .background(.ultraThinMaterial)
     }
 }
 
@@ -31,6 +30,7 @@ private struct HomeMenu: View {
         VStack(spacing: 4) {
             MenuRow(title: "Add new bundle", icon: "plus", action: onAdd)
             MenuRow(title: "Show / Hide", icon: "eye") { manager.toggleAll() }
+            MenuRow(title: "Reveal in Finder", icon: "folder") { manager.revealBundlesFolder() }
             Divider().padding(.vertical, 2)
             MenuRow(title: "Quit", icon: "power") { NSApplication.shared.terminate(nil) }
         }
