@@ -82,6 +82,14 @@ writes the manifest immediately (tiny, atomic), so a crash never loses content.
 `FileManager`'s app-support URL resolves to this container automatically — code uses that,
 never a hard-coded path.
 
+**Custom storage location (planned, v1.1):** the location is a single chokepoint —
+`BundleStore.bundlesURL`, set once in `init()`; everything else derives from it. The idea
+is to let the user pick where bundles live (e.g. `~/Documents/Bundle`) via a setting /
+onboarding step, defaulting to the current container. The hard part is the sandbox: an
+arbitrary folder needs **security-scoped bookmarks** (persist the bookmark data, resolve +
+`startAccessingSecurityScopedResource()` on every launch). Becomes trivial if v1.0 ships
+non-sandboxed (direct download). See ROADMAP "v1.1 — Custom storage location".
+
 ### Move vs. delete semantics
 A **move** relocates bytes (the leftover copy is redundant → removed permanently). A
 **delete** destroys content with no destination → goes to the **Trash** (recoverable).

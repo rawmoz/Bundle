@@ -356,6 +356,51 @@ every time a new interaction lands, so it waits until there's nothing left to ad
 
 ---
 
+## v1.1 — Custom storage location (idea, tied to v1.0 distribution)
+**Goal:** let the user choose *where* their bundles live — e.g. `~/Documents/Bundle`
+instead of the hidden sandbox container — so the files are reachable in a place of their
+choosing. Surfaced as a setting (and/or an onboarding step), defaulting to today's
+location so nothing breaks for existing setups.
+
+### Why it's mostly easy, with one hard part
+- **The location is a single chokepoint.** Everything in `BundleStore` derives from one
+  property, `bundlesURL`, set once in `init()`. Pointing the app at a different folder is
+  a one-line change; `directory(for:)`, `save`, `loadAll`, `ingest`, Trash, and cross-
+  bundle move all flow from it. Reveal in Finder (v0.6) only gets *better*.
+- **The sandbox is the cost.** An arbitrary user folder (Documents, etc.) needs
+  **security-scoped bookmarks**: pick the folder via `NSOpenPanel` (the
+  `files.user-selected.read-write` entitlement already covers this), but the grant
+  evaporates on quit — so create a `.withSecurityScope` bookmark, persist the bookmark
+  *data* (UserDefaults), and on **every launch** resolve it and
+  `startAccessingSecurityScopedResource()` before any I/O, holding the scope for the app's
+  whole lifetime (resolve once at launch, never stop until quit).
+
+### Scope of work
+- A small `StorageLocation` helper: bookmark create / persist / resolve, plus a
+  "change location" flow.
+- `BundleStore` takes a resolved root URL instead of hardcoding application-support.
+- **Migration:** when the location changes, `moveItem` the existing UUID subfolders from
+  the old root into the new one (or existing bundles appear to vanish).
+- **Always nest a `Bundle/` subfolder** inside the chosen location, so picking
+  `~/Documents` directly doesn't dump UUID folders loose into Documents.
+- Settings entry (and optionally a first-launch onboarding step).
+
+### Risk / unknown
+- The one real unknown — same flavor as the -8058 gotcha — is holding a security scope
+  for a borderless, non-activating `LSUIElement` app. Should be fine (scope is file-level,
+  not tied to a key window), but validate it first.
+
+### Decision interaction with v1.0
+- **Mac App Store route** → sandbox mandatory → the bookmark dance above is required.
+- **Direct-download (notarized) route** → sandbox can be dropped → this feature becomes
+  trivial (just a path in UserDefaults, no bookmarks at all). So if direct distribution
+  wins, this is nearly free. **Decide v1.0 first; it sets how much of this is needed.**
+
+**Done when:** the user can pick a folder for their bundles, it persists across relaunches,
+existing bundles migrate cleanly, and the default keeps current setups working untouched.
+
+---
+
 ## Future / TBD
 - Context menu "More" items
 - Horizontal grid orientation toggle
