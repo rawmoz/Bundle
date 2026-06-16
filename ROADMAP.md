@@ -349,6 +349,9 @@ split + `moveSelection`/`previewSelectedCell`), `BundlePanelController` (resign-
 stop at every edge, and space opens (and re-closes) a native Quick Look preview of an
 occupied cell's content, with the cell staying selected behind the preview.
 
+**Also added here:** `⌘⌫` on a selected occupied cell trashes its content (recoverable),
+matching Finder — one more branch in the same keyDown monitor, reusing `deleteContent`.
+
 ---
 
 ## v0.9 — Polish & animations

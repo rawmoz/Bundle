@@ -36,6 +36,7 @@ Selects the cell (blue ring). A selected cell can:
 - Receive a paste (`⌘V`) — file, folder, image, or plain text from clipboard
 - Receive a drag — drag any content directly into the cell
 - Be copied from — `⌘C` copies the cell's content back to clipboard
+- Be deleted — `⌘⌫` trashes a selected occupied cell's content (recoverable), like Finder — v0.8
 - Be rearranged — drag an occupied cell onto another cell to **move** (empty target) or
   **swap** (occupied target), within a bundle or across bundles — see v0.7
 

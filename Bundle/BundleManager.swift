@@ -341,6 +341,11 @@ final class BundleManager {
             let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
 
             if flags.contains(.command) {
+                // ⌘⌫ trashes an occupied cell's content (recoverable), like Finder.
+                if event.keyCode == 51, !bundle.cells[index].isEmpty {
+                    self.deleteContent(bundle: bundle, index: index)
+                    return nil
+                }
                 guard let key = event.charactersIgnoringModifiers?.lowercased() else { return event }
                 if key == "v", self.paste(into: bundle, index: index) { return nil }
                 if key == "c", self.copy(from: bundle, index: index) { return nil }
