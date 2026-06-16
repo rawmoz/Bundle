@@ -416,6 +416,9 @@ existing bundles migrate cleanly, and the default keeps current setups working u
 ---
 
 ## Future / TBD
+- Emoji in bundle names — the rename field's SwiftUI `.popover` is `.transient`, so the fn
+  emoji picker (a separate window) steals focus and dismisses it. Fix needs a manually
+  presented `NSPopover` with `.applicationDefined` behavior. Workaround today: paste an emoji.
 - Context menu "More" items
 - Horizontal grid orientation toggle
 - iCloud sync across Macs
