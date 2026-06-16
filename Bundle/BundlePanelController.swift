@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import Quartz
 
 // Borderless panels can't become key by default, which would block the rename
 // text field in the settings popover from accepting keystrokes. .nonactivatingPanel
@@ -84,6 +85,10 @@ final class BundlePanelController {
             forName: NSWindow.didResignKeyNotification, object: panel, queue: .main
         ) { [weak self] _ in
             guard let self, self.selection.bundleID == self.bundle.id else { return }
+            // Keep the selection if focus left only because Quick Look took key — the
+            // cell should stay selected behind the preview, like a file in Finder, so
+            // closing the preview returns to the same highlighted cell (v0.8).
+            if QLPreviewPanel.sharedPreviewPanelExists(), QLPreviewPanel.shared().isVisible { return }
             self.selection.clear()
         }
     }

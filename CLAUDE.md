@@ -42,9 +42,9 @@ Selects the cell (blue ring). A selected cell can:
 **Double-click**
 Opens an occupied cell's content in its default app (`NSWorkspace.open`), like Finder.
 - Be navigated from — **arrow keys** move the selection around the grid (full 2D, edge-
-  stops, no wrap) — see v0.8
+  stops, no wrap) — v0.8
 - Be previewed — **spacebar** opens a native macOS Quick Look preview of an occupied cell's
-  content, toggling closed on a second press — see v0.8
+  content, toggling closed on a second press; the cell stays selected behind the preview — v0.8
 
 **Right-click on empty cell**
 - Paste
@@ -194,6 +194,34 @@ No Accessibility permissions required. Works in sandboxed apps.
   `.onDrop` — only so the drop *fires* for an internal drag; the in-memory value does the work.
 - **Double-click** an occupied cell → `BundleManager.openContent` opens it in the default
   app. The `count: 2` tap gesture is ordered **before** the `count: 1` select gesture.
+
+### Keyboard navigation & Quick Look (v0.8)
+- **One keyDown monitor, two branches.** `BundleManager.installKeyboardMonitor` now
+  resolves the selected cell first, then splits: a `.command` branch (the v0.4 `⌘V`/`⌘C`,
+  unchanged) and a modifier-less branch for arrows/space. The modifier-less branch rejects
+  only command/control/option — arrow keys carry `.function`/`.numericPad`, so requiring an
+  empty flag set would never match.
+- **Arrow navigation** is pure selection math (`moveSelection`): the grid is a flat array,
+  so up/down is a ±`columns` stride and left/right is ±1 with row-edge stops (`column == 0`
+  / `column == columns-1`). Out-of-grid moves are ignored — the ring stays put, no wrap, no
+  beep. No file I/O, no persistence.
+- **Spacebar Quick Look** (`previewSelectedCell` → `QuickLookController`): toggles a native
+  `QLPreviewPanel` of an occupied cell's on-disk URL. Empty cell → `contentURL` is nil so
+  nothing opens, but the event is still swallowed so there's no beep.
+- **Quick Look is driven manually, not via the responder chain.** As an `LSUIElement` with
+  borderless non-activating panels there's no reliable responder-chain controller, so
+  `QuickLookController` sets the panel's `dataSource`/`delegate` directly and
+  `NSApp.activate(...)` + `makeKeyAndOrderFront` (otherwise the preview can open behind the
+  frontmost app). `import Quartz`; `NSURL` conforms to `QLPreviewItem`.
+- **Gotcha — selection must survive the preview (the v0.8 equivalent of the -8058 lesson).**
+  Making the QL panel key makes the bundle panel resign key, which the v0.4
+  `didResignKeyNotification` handler treats as focus-loss and clears the selection — so the
+  blue ring vanished the instant the preview opened. Fix: that handler now bails when
+  `QLPreviewPanel.sharedPreviewPanelExists() && .isVisible`, so the cell stays selected
+  behind the preview (Finder parity) and real focus-loss still deselects.
+- **Don't swallow space while typing.** The modifier-less branch bails when the key window's
+  first responder `is NSText`, so space stays typeable in the rename field (a cell can still
+  be selected behind the settings popover).
 
 ### State ownership (v0.2, persistence added v0.4)
 `AppCoordinator` is gone. `BundleManager` (`@Observable`, held as `@State` in `BundleApp`) is the single source of truth — it owns every `BundleState`, the matching `BundlePanelController` keyed by UUID, the `HotkeyManager`, the `SelectionStore`, and the `BundleStore`. `createBundle` builds the state, spins up a controller, shows it, and saves; on launch it loads every `manifest.json` and restores positions. `toggleAll` shows/hides every panel together.

@@ -329,18 +329,38 @@ final class BundleManager {
 
     // MARK: - Keyboard
 
-    // ⌘V / ⌘C act on the selected cell. A local monitor fires while one of our panels
-    // is key (selecting a cell makes its panel key, like the rename field does).
+    // Keyboard acting on the selected cell. A local monitor fires while one of our
+    // panels is key (selecting a cell makes its panel key, like the rename field does).
+    // Two branches, both requiring a selected cell:
+    //   • ⌘V / ⌘C — paste into / copy out of the cell (v0.4).
+    //   • arrows / space — move the selection, or Quick Look the content (v0.8).
     // Returning nil swallows a handled event so the system doesn't beep.
     private func installKeyboardMonitor() {
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard let self,
-                  event.modifierFlags.contains(.command),
-                  let key = event.charactersIgnoringModifiers?.lowercased(),
-                  let (bundle, index) = self.selectedCell() else { return event }
-            if key == "v", self.paste(into: bundle, index: index) { return nil }
-            if key == "c", self.copy(from: bundle, index: index) { return nil }
-            return event
+            guard let self, let (bundle, index) = self.selectedCell() else { return event }
+            let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+
+            if flags.contains(.command) {
+                guard let key = event.charactersIgnoringModifiers?.lowercased() else { return event }
+                if key == "v", self.paste(into: bundle, index: index) { return nil }
+                if key == "c", self.copy(from: bundle, index: index) { return nil }
+                return event
+            }
+
+            // Modifier-less navigation / preview. Arrow keys carry .function/.numericPad,
+            // so we reject only command/control/option rather than requiring no flags.
+            // Bail while a text field is editing so space stays typeable in the rename
+            // field (a cell may still be selected behind the settings popover).
+            guard !flags.contains(.control), !flags.contains(.option),
+                  !self.isEditingText() else { return event }
+            switch event.keyCode {
+            case 123: self.moveSelection(.left, bundle: bundle, index: index);  return nil
+            case 124: self.moveSelection(.right, bundle: bundle, index: index); return nil
+            case 125: self.moveSelection(.down, bundle: bundle, index: index);  return nil
+            case 126: self.moveSelection(.up, bundle: bundle, index: index);    return nil
+            case 49:  self.previewSelectedCell(bundle: bundle, index: index);   return nil
+            default:  return event
+            }
         }
     }
 
@@ -349,6 +369,39 @@ final class BundleManager {
               let bundle = bundles.first(where: { $0.id == id }),
               index < bundle.cells.count else { return nil }
         return (bundle, index)
+    }
+
+    // True while a text field has the field editor — e.g. the rename field in the
+    // settings popover — so the arrow/space branch doesn't hijack normal typing.
+    private func isEditingText() -> Bool {
+        NSApp.keyWindow?.firstResponder is NSText
+    }
+
+    private enum MoveDirection { case up, down, left, right }
+
+    // Move the selection one cell within its bundle's grid. The grid is a flat array,
+    // so up/down is a ±columns stride and left/right is ±1 with row-edge stops (no wrap).
+    // A move that would leave the grid is ignored — the selection simply stays put.
+    private func moveSelection(_ direction: MoveDirection, bundle: BundleState, index: Int) {
+        let columns = bundle.columns
+        let count = bundle.cells.count
+        let column = index % columns
+        var target = index
+        switch direction {
+        case .up:    if index - columns >= 0    { target = index - columns }
+        case .down:  if index + columns < count { target = index + columns }
+        case .left:  if column > 0              { target = index - 1 }
+        case .right: if column < columns - 1    { target = index + 1 }
+        }
+        if target != index { selection.select(bundleID: bundle.id, index: target) }
+    }
+
+    // Space: toggle a native Quick Look preview of an occupied cell. On an empty cell
+    // contentURL is nil, so nothing opens — but the caller still swallowed the event,
+    // so the system doesn't beep.
+    private func previewSelectedCell(bundle: BundleState, index: Int) {
+        guard let url = contentURL(for: bundle, cell: bundle.cells[index]) else { return }
+        QuickLookController.shared.toggle(url: url)
     }
 
     private func makeController(for state: BundleState) -> BundlePanelController {

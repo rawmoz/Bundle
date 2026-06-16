@@ -279,7 +279,7 @@ content, within and across bundles, with nothing lost on a cancelled drag.
 
 ---
 
-## v0.8 — Keyboard navigation & Quick Look preview
+## v0.8 — Keyboard navigation & Quick Look preview ✅ (2026-06-15)
 **Goal:** drive a selected cell entirely from the keyboard — move the selection with the
 arrow keys, and hit space to preview the cell's content exactly like Finder.
 
@@ -317,26 +317,37 @@ modifier-less keys (arrows, space) are also handled.
   data-source object. All four content types preview natively — `.txt` for text, the image,
   the folder's large icon, the PDF/doc — matching Finder.
 
-### Care points
-- **Quick Look from an accessory app is the one real unknown.** The app is a menu-bar
-  `LSUIElement` with **borderless, non-activating** panels. `QLPreviewPanel` normally drives
-  itself through the responder chain (`acceptsPreviewPanelControl`), which assumes a
-  conventional key-window app. Expect to **present and manage the panel manually** (set its
-  `dataSource` directly, `makeKeyAndOrderFront`) rather than relying on the responder chain.
-  Known-solvable, but validate it first — this is the v0.8 equivalent of the -8058 gotcha.
-- Restructuring the keyDown monitor must not regress `⌘V`/`⌘C`: keep the command branch and
-  add the modifier-less arrow/space branches alongside it, all still guarded by "a cell is
-  selected."
-- No storage, model, or window-ownership changes. `BundleManager` stays the single source
-  of truth and keeps owning keyboard routing.
+### Care points (met)
+- **Quick Look from an accessory app was the one real unknown — and it's handled by driving
+  the panel manually.** The app is a menu-bar `LSUIElement` with **borderless,
+  non-activating** panels, so there's no reliable responder-chain controller
+  (`acceptsPreviewPanelControl`). `QuickLookController` sets the shared `QLPreviewPanel`'s
+  `dataSource`/`delegate` directly and `NSApp.activate(...)` + `makeKeyAndOrderFront` (the
+  activate is needed or the preview opens behind the frontmost app). `import Quartz`;
+  `NSURL` conforms to `QLPreviewItem`.
+- **The real gotcha was selection survival, not presentation (the v0.8 -8058 equivalent).**
+  Making the QL panel key makes the bundle panel resign key, and the v0.4
+  `didResignKeyNotification` handler clears the selection on focus-loss — so the blue ring
+  vanished the moment the preview opened (Finder keeps the file selected behind Quick Look).
+  Fix: that handler now bails when `QLPreviewPanel.sharedPreviewPanelExists() &&
+  .isVisible`, so the cell stays selected behind the preview and real focus-loss (desktop /
+  another app) still deselects.
+- **`⌘V`/`⌘C` did not regress.** The monitor resolves the selected cell first, then splits
+  into a `.command` branch (unchanged) and a modifier-less arrow/space branch that rejects
+  only command/control/option (arrow keys carry `.function`/`.numericPad`, so an empty-flag
+  requirement would never match).
+- **Space stays typeable in the rename field.** The modifier-less branch bails when the key
+  window's first responder `is NSText`, so a cell selected behind the settings popover
+  doesn't let space get swallowed mid-typing.
+- No storage, model, or window-ownership changes. `BundleManager` stayed the single source
+  of truth and kept owning keyboard routing.
 
-**Files likely touched:** `BundleManager` (monitor), `SelectionStore` or `Models` (a small
-move helper, optional). **Files likely introduced:** a `QuickLookController`
-(`QLPreviewPanelDataSource`/`Delegate`).
+**Files introduced:** `QuickLookController`. **Files touched:** `BundleManager` (monitor
+split + `moveSelection`/`previewSelectedCell`), `BundlePanelController` (resign-key guard).
 
-**Done when:** with a cell selected, the arrow keys move the blue ring around the grid and
+**Done when:** ✅ with a cell selected, the arrow keys move the blue ring around the grid and
 stop at every edge, and space opens (and re-closes) a native Quick Look preview of an
-occupied cell's content.
+occupied cell's content, with the cell staying selected behind the preview.
 
 ---
 
