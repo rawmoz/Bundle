@@ -224,6 +224,20 @@ No Accessibility permissions required. Works in sandboxed apps.
   first responder `is NSText`, so space stays typeable in the rename field (a cell can still
   be selected behind the settings popover).
 
+### Click-to-select latency (misc fix)
+- **Symptom:** clicking a cell (even an empty one) took ~1s to show the blue ring, while
+  arrow-key selection was instant. Cause: the cell had `.onTapGesture(count: 2)` (open) and
+  `.onTapGesture(count: 1)` (select) — two SwiftUI tap gestures on one view force a wait for
+  the double-click interval to elapse before the single tap can resolve. Arrow keys bypass
+  gestures (pure `SelectionStore` math) so they never waited.
+- **Fix:** select via `.simultaneousGesture(TapGesture().onEnded { onSelect() })` instead of
+  a sibling `count:1` tap. A simultaneous gesture recognizes on the first click immediately
+  (no disambiguation wait); a double-click harmlessly runs `onSelect()` then `onOpen()` on
+  the same cell. Native AppKit apps feel instant for the same reason — they act on the click
+  and read `clickCount`, never waiting for a maybe-second click. (A full mouse-down handler
+  would be a hair faster still but needs an `NSViewRepresentable` bridge that risks the
+  cell's existing `.onDrag`/`.onDrop`; the two-line simultaneous-gesture fix is enough.)
+
 ### State ownership (v0.2, persistence added v0.4)
 `AppCoordinator` is gone. `BundleManager` (`@Observable`, held as `@State` in `BundleApp`) is the single source of truth — it owns every `BundleState`, the matching `BundlePanelController` keyed by UUID, the `HotkeyManager`, the `SelectionStore`, and the `BundleStore`. `createBundle` builds the state, spins up a controller, shows it, and saves; on launch it loads every `manifest.json` and restores positions. `toggleAll` shows/hides every panel together.
 

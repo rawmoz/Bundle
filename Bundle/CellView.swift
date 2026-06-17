@@ -39,9 +39,13 @@ struct CellView: View {
         .frame(width: BundleLayout.cellSize, height: BundleLayout.cellSize)
         .contentShape(Rectangle())
         // Double-click opens an occupied cell's content; single-click selects. The
-        // count: 2 gesture must come first so a double-click isn't swallowed as a tap.
+        // select is a *simultaneous* gesture so it fires on the first click immediately
+        // instead of waiting out the double-click interval to disambiguate (the old
+        // count:1 + count:2 pair forced a ~1s wait before selecting). A double-click
+        // harmlessly runs onSelect() first, then onOpen() — same cell, no side effect.
+        // This matches how native AppKit apps feel: act now, don't wait for a maybe-second-click.
         .onTapGesture(count: 2) { if !cell.isEmpty { onOpen() } }
-        .onTapGesture { onSelect() }
+        .simultaneousGesture(TapGesture().onEnded { onSelect() })
         .onDrop(of: [.bundleCell, .fileURL, .image, .text], isTargeted: $isTargeted) { onDropProviders($0) }
         .contextMenu {
             if cell.isEmpty {
