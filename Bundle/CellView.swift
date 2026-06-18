@@ -30,14 +30,19 @@ struct CellView: View {
             content
             if !cell.isEmpty, let name = cell.displayName {
                 Text(name)
-                    .font(.system(size: 8))
-                    .foregroundStyle(.white.opacity(0.7))
+                    .font(BundleStyle.cellNameFont)
+                    .foregroundStyle(BundleStyle.cellNameColor)
                     .lineLimit(1)
                     .truncationMode(.middle)
                     .frame(maxWidth: BundleLayout.cellSize)
             }
         }
         .frame(width: BundleLayout.cellSize, height: BundleLayout.cellSize)
+        // Animate the empty↔occupied switch (fill on paste/drop, clear on delete/move-out)
+        // and the drag-hover highlight. Both key off observable cell state, so a content
+        // change anywhere routes through here and the cell visibly pops in / eases out.
+        .animation(BundleStyle.Motion.cellContent, value: cell.isEmpty)
+        .animation(BundleStyle.Motion.cellHover, value: isTargeted)
         .contentShape(Rectangle())
         // Double-click opens an occupied cell's content; single-click selects. The
         // select is a *simultaneous* gesture so it fires on the first click immediately
@@ -62,20 +67,24 @@ struct CellView: View {
     private var content: some View {
         if cell.isEmpty {
             Circle()
-                .fill(.white.opacity(isTargeted ? 0.18 : 0.08))
-                .overlay(Circle().strokeBorder(ringColor, lineWidth: isSelected ? 2.5 : 1.5))
+                .fill(isTargeted ? BundleStyle.emptyCellTargetedFill : BundleStyle.emptyCellFill)
+                .overlay(Circle().strokeBorder(ringColor, lineWidth: ringWidth))
                 .frame(width: BundleLayout.cellSize, height: BundleLayout.cellSize)
+                // Cleared cells fade back to the empty slot.
+                .transition(.opacity)
         } else {
             thumbnail
                 .frame(width: thumbSize, height: thumbSize)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 9)
-                        .strokeBorder(ringColor, lineWidth: isSelected ? 2.5 : 0)
+                    RoundedRectangle(cornerRadius: BundleStyle.thumbnailRingCornerRadius)
+                        .strokeBorder(ringColor, lineWidth: isSelected ? BundleStyle.selectedRingWidth : 0)
                 )
                 .onDrag {
                     onBeginDrag()       // record this cell as the drag source
                     return dragProvider()
                 }
+                // Filled content pops in (scale up from the slot center) and out.
+                .transition(.scale(scale: 0.55).combined(with: .opacity))
         }
     }
 
@@ -148,6 +157,11 @@ struct CellView: View {
     }
 
     private var ringColor: Color {
-        isSelected ? .blue : .white.opacity(0.3)
+        isSelected ? BundleStyle.selectionColor : BundleStyle.idleRingColor
+    }
+
+    // Empty-cell ring: thicker when selected, the thin idle ring otherwise.
+    private var ringWidth: CGFloat {
+        isSelected ? BundleStyle.selectedRingWidth : BundleStyle.idleRingWidth
     }
 }

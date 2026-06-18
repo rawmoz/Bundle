@@ -86,7 +86,7 @@ enum BundleLayout {
     static let cellSize: CGFloat = 64   // matches macOS Control Center small widget
     static let gap: CGFloat = 12        // spacing between cells and around the header
     static let pad: CGFloat = 16        // outer padding inside the rounded panel
-    static let headerHeight: CGFloat = 18 // title row: name label + `:::` grip
+    static let headerHeight: CGFloat = 22 // title row: name label + `:::` grip
 
     // Full panel size: outer padding + header + gap + grid (cells and inter-cell gaps).
     static func panelSize(columns: Int, rows: Int) -> CGSize {

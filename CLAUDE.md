@@ -242,6 +242,28 @@ No Accessibility permissions required. Works in sandboxed apps.
   first responder `is NSText`, so space stays typeable in the rename field (a cell can still
   be selected behind the settings popover).
 
+### Polish & animations (v0.9)
+- **`BundleStyle` is the look-and-feel source of truth** — the sibling of `BundleLayout`
+  (geometry). Every color, corner radius, material, font, ring width, and animation routes
+  through it; `CellView`/`BundleGridView` hold no raw style numbers. A restyle is a one-file
+  change. Motion constants live under `BundleStyle.Motion`.
+- **Panel fade = animated `alphaValue`** in `BundlePanelController.show()`/`hide()` via
+  `NSAnimationContext`. `toggleAll` already routes every panel through these, so `⌘⌥B` fades
+  all panels together with no extra code. Re-entrancy: `show()` only resets alpha to 0 when
+  the panel was fully off-screen (re-showing mid-fade just animates back to 1, no flicker),
+  and `hide()`'s completion re-checks `alphaValue == 0` before `orderOut` so an interrupting
+  show can't pull the panel out from under itself.
+- **No panel *scale*, on purpose** — a show/hide scale needs layer anchor-point hacking on
+  the borderless `NSHostingView` (fragile, can break layout). Panels fade; the cell pop-in
+  carries the scale where SwiftUI owns the anchor.
+- **Cell fill/clear animates off `cell.isEmpty`** (`.animation(value:)` in `CellView`), so
+  every fill/clear path (paste, drop, delete, drag-out, rearrange) animates through one
+  place. Occupied content uses `.scale(scale: 0.55).combined(with: .opacity)`; cleared cells
+  fade. Drag-hover highlight has its own quick fade keyed on `isTargeted`.
+- **Bundle title** is 14pt semibold @ 85% white (was `.caption`/60%); the grip stays 45% so
+  the contrast carries the hierarchy. `BundleLayout.headerHeight` 18→22 for breathing room —
+  centralized, so the AppKit frame and SwiftUI layout don't drift.
+
 ### Click-to-select latency (misc fix)
 - **Symptom:** clicking a cell (even an empty one) took ~1s to show the blue ring, while
   arrow-key selection was instant. Cause: the cell had `.onTapGesture(count: 2)` (open) and

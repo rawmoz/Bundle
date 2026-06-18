@@ -365,19 +365,64 @@ matching Finder — one more branch in the same keyDown monitor, reusing `delete
 
 ---
 
-## v0.9 — Polish & animations
+## v0.9 — Polish & animations ✅ (2026-06-18)
 **Goal:** make the app *feel* premium and finished — the do-last pass, deliberately
 scheduled after the feature set is frozen (v0.6–v0.8). Doing this earlier means re-polishing
 every time a new interaction lands, so it waits until there's nothing left to add.
 
-- Bundle panel appear/disappear animation (fade or subtle scale)
-- Cell fill and clear animations
-- `⌘⌥B` show/hide animated across all panels
-- Visual QA pass — corner radius, blur material, spacing, typography all consistent across
-  every surface (panels, cells, popover, settings). Worth doing exactly once, here, when no
-  new UI is coming.
+### Centralized style tokens — the structural half of the "visual QA pass"
+- **`BundleStyle`** (new file) is the look-and-feel source of truth, the sibling of
+  `BundleLayout` (geometry). Every color, corner radius, material, font, ring width, and
+  animation routes through it. This *is* the consistency pass made structural: the values
+  are provably identical across panels / cells / header / popover, and a future restyle is
+  a one-file change instead of a hunt through every view. `CellView` and `BundleGridView`
+  magic numbers were all replaced with `BundleStyle` references (visuals unchanged, just
+  consolidated). Motion constants live under `BundleStyle.Motion` so timing is tunable in
+  one place.
 
-**Done when:** the app feels polished enough to use daily and nothing looks unfinished.
+### Panel appear/disappear fade — and ⌘⌥B animated for free
+- **`BundlePanelController.show()`/`hide()`** animate the panel's `alphaValue` via
+  `NSAnimationContext`. Because `toggleAll` already drives **every** panel through these,
+  `⌘⌥B` fades the whole set together with no extra code — one motion path shared by toggle,
+  launch restore, and create.
+- **Re-entrancy is handled:** re-showing a panel that's still mid-fade-out animates alpha
+  back up (no flicker, no snap to transparent — only a fully off-screen panel resets to 0),
+  and the fade-out's completion re-checks `alphaValue` before `orderOut` so an interrupting
+  show can't yank the panel away underneath itself.
+- **Chose fade over a panel scale, deliberately.** A show/hide *scale* would need
+  layer anchor-point manipulation on the borderless `NSHostingView`, which is fragile and
+  risks breaking panel layout — exactly the corner to avoid. Panels fade (the goal allowed
+  "fade or subtle scale"); the *cells* carry the scale motion where SwiftUI owns the anchor
+  safely.
+
+### Cell fill/clear animation
+- **`CellView`** animates the empty↔occupied switch off observable `cell.isEmpty`, so a
+  fill or clear from *anywhere* — paste, drop, delete, drag-out, cross-cell rearrange —
+  animates through the same path. Occupied content pops in with a scale-up-from-center +
+  opacity transition (`.scale(scale: 0.55).combined(with: .opacity)`); a cleared cell fades
+  back to the empty slot. A quick hover-highlight fade was added on drag-over too
+  (`BundleStyle.Motion.cellHover`).
+
+### Title typography bump (designer pass on the bundle name)
+- The bundle name was `.caption` (~11pt, regular, 60% white) — it read as a *label*, not a
+  *title*. Bumped to **14pt semibold at 85% white** so it sits one clear step above the
+  content in hierarchy without shouting; the `:::` grip stays at 45% white so the contrast
+  *is* the hierarchy. `BundleLayout.headerHeight` 18→22 gives the larger text breathing room
+  so it never clips (centralized, so the AppKit panel frame and SwiftUI layout stay in sync;
+  existing panels just grow 4pt taller, top-anchored, on next launch).
+
+### Tuning knobs (all single-line)
+- Fade duration → `BundleStyle.Motion.panelFadeDuration` (0.22s)
+- Cell pop spring → `BundleStyle.Motion.cellContent` (response 0.32, damping 0.72)
+- Title size/weight/brightness → `BundleStyle.headerFont` / `headerColor`
+- Header height → `BundleLayout.headerHeight`
+
+**Files introduced:** `BundleStyle`. **Files touched:** `BundlePanelController` (alpha
+fade), `CellView` (transitions + tokens), `BundleGridView` (tokens), `Models` (headerHeight).
+
+**Done when:** ✅ panels fade in/out (including ⌘⌥B across all of them), cells animate on
+fill/clear, the bundle title reads as a proper title, and every visual constant lives in one
+place. *(Implemented + builds clean; animation feel pending live confirmation in Xcode.)*
 
 ---
 

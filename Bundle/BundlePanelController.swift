@@ -113,7 +113,15 @@ final class BundlePanelController {
             panel.center()
             bundle.position = panel.frame.origin
         }
+        // Fade in. Only snap to transparent if the panel was fully off-screen — re-showing
+        // a panel that's still mid-fade-out just animates alpha back to 1 (no flicker), and
+        // because toggleAll/⌘⌥B drive every panel through here, the whole set fades together.
+        if !panel.isVisible { panel.alphaValue = 0 }
         panel.orderFront(nil)
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = BundleStyle.Motion.panelFadeDuration
+            panel.animator().alphaValue = 1
+        }
     }
 
     // Keep a restored bundle reachable: if its saved frame doesn't land on any current
@@ -129,7 +137,17 @@ final class BundlePanelController {
                        y: visible.midY - frame.height / 2)
     }
 
-    func hide() { panel.orderOut(nil) }
+    func hide() {
+        // Fade out, then actually remove the panel. The completion re-checks alpha so a
+        // re-show that interrupts the fade (alpha animated back toward 1) doesn't yank the
+        // panel off-screen underneath itself.
+        NSAnimationContext.runAnimationGroup({ ctx in
+            ctx.duration = BundleStyle.Motion.panelFadeDuration
+            panel.animator().alphaValue = 0
+        }, completionHandler: { [panel] in
+            if panel.alphaValue == 0 { panel.orderOut(nil) }
+        })
+    }
 
     func close() {
         panel.orderOut(nil)

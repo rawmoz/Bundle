@@ -25,8 +25,8 @@ struct BundleGridView: View {
 
     var body: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 20)
-                .fill(.ultraThinMaterial)
+            RoundedRectangle(cornerRadius: BundleStyle.panelCornerRadius)
+                .fill(BundleStyle.panelMaterial)
                 // Tapping empty space (padding/gaps, not a cell) clears the selection.
                 .onTapGesture { selection.clear() }
 
@@ -42,8 +42,8 @@ struct BundleGridView: View {
     private var header: some View {
         HStack(spacing: 8) {
             Text(bundle.name.isEmpty ? "Untitled" : bundle.name)
-                .font(.caption)
-                .foregroundStyle(.white.opacity(0.6))
+                .font(BundleStyle.headerFont)
+                .foregroundStyle(BundleStyle.headerColor)
                 .lineLimit(1)
                 .truncationMode(.tail)
             Spacer(minLength: 4)
@@ -63,7 +63,7 @@ struct BundleGridView: View {
                 }
             }
         }
-        .foregroundStyle(.white.opacity(0.45))
+        .foregroundStyle(BundleStyle.gripColor)
         .contentShape(Rectangle())
         .onTapGesture {
             onActivate()
