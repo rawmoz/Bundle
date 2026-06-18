@@ -187,6 +187,24 @@ final class BundleStore {
         try? fm.trashItem(at: url, resultingItemURL: nil)
     }
 
+    // Rename a cell's content file on disk, keeping its original extension. The new base
+    // name is uniquified against the folder so two files can't collide. Returns the new
+    // stored filename, or nil on failure / no-op (caller leaves the cell unchanged).
+    func renameContentFile(_ filename: String, to newBaseName: String, bundleID: UUID) -> String? {
+        let dir = directory(for: bundleID)
+        let srcURL = dir.appendingPathComponent(filename)
+        guard fm.fileExists(atPath: srcURL.path) else { return nil }
+        let trimmed = newBaseName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let ext = (filename as NSString).pathExtension
+        let desired = ext.isEmpty ? trimmed : "\(trimmed).\(ext)"
+        if desired == filename { return filename }   // unchanged
+        let newName = Self.uniqueName(desired, in: dir)
+        let destURL = dir.appendingPathComponent(newName)
+        do { try fm.moveItem(at: srcURL, to: destURL); return newName }
+        catch { return nil }
+    }
+
     // Permanently delete a cell's content file (used after drag-out — it's a move, the
     // file now lives at the drop destination, so the bundle's copy is just redundant).
     func deleteContentFile(_ filename: String, bundleID: UUID) {

@@ -20,8 +20,11 @@ struct CellView: View {
     var onBeginDrag: () -> Void // this cell's drag started — record it as the source
     var onOpen: () -> Void      // double-click — open the content in its default app
     var onReveal: () -> Void    // right-click — reveal this cell's file in Finder
+    var onRename: (String) -> Void // right-click — rename the file on disk to a new base name
 
     @State private var isTargeted = false
+    @State private var showingRename = false
+    @State private var renameText = ""
 
     private let thumbSize: CGFloat = 40
 
@@ -58,9 +61,47 @@ struct CellView: View {
                 Button("Paste") { onPaste() }
             } else {
                 Button("Reveal in Finder") { onReveal() }
-                Button("Delete Content", role: .destructive) { onDelete() }
+                Button("Rename…") {
+                    onSelect()                       // make the panel key so the field can type
+                    renameText = renameBaseName
+                    showingRename = true
+                }
+                Button(role: .destructive) { onDelete() } label: {
+                    Text("Delete Content").foregroundStyle(.red)
+                }
             }
         }
+        .popover(isPresented: $showingRename, arrowEdge: .bottom) { renamePopover }
+    }
+
+    // Rename the on-disk file. Pre-fills the current base name (extension is preserved
+    // by the store); submitting an empty/blank name is a no-op.
+    private var renamePopover: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Rename").font(.headline)
+            TextField("Name", text: $renameText)
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 200)
+                .onSubmit { commitRename() }
+            HStack {
+                Spacer()
+                Button("Cancel") { showingRename = false }
+                Button("Rename") { commitRename() }
+                    .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(14)
+    }
+
+    // The current file's base name (no extension) — the editable part of the rename.
+    private var renameBaseName: String {
+        ((cell.storedFilename ?? "") as NSString).deletingPathExtension
+    }
+
+    private func commitRename() {
+        let trimmed = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty { onRename(trimmed) }
+        showingRename = false
     }
 
     @ViewBuilder

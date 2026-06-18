@@ -73,6 +73,7 @@ final class BundlePanelController {
             onBeginDragCell: { [weak manager] index in manager?.beginCellDrag(bundle: bundle, index: index) },
             onOpenCell: { [weak manager] index in manager?.openContent(bundle: bundle, index: index) },
             onRevealCell: { [weak manager] index in manager?.revealContent(bundle: bundle, index: index) },
+            onRenameCell: { [weak manager] index, name in manager?.renameContent(bundle: bundle, index: index, to: name) },
             onRevealBundle: { [weak manager] in manager?.revealBundleFolder(bundle) }
         )
         hosting = NSHostingView(rootView: view)

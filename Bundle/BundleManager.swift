@@ -85,6 +85,21 @@ final class BundleManager {
             [store.contentFileURL(for: bundle.id, filename: filename)])
     }
 
+    // Rename an occupied cell's backing file on disk to a new base name (the extension
+    // is preserved by the store). The label tracks the new filename for everything but
+    // text cells, whose label is a content preview rather than the filename.
+    func renameContent(bundle: BundleState, index: Int, to newBaseName: String) {
+        guard index < bundle.cells.count,
+              let filename = bundle.cells[index].storedFilename,
+              let newFilename = store.renameContentFile(filename, to: newBaseName, bundleID: bundle.id)
+        else { return }
+        bundle.cells[index].storedFilename = newFilename
+        if bundle.cells[index].contentType != .text {
+            bundle.cells[index].displayName = newFilename
+        }
+        save(bundle)
+    }
+
     // Open an occupied cell's content in its default app (double-click, like Finder).
     func openContent(bundle: BundleState, index: Int) {
         guard index < bundle.cells.count,

@@ -57,7 +57,9 @@ Opens an occupied cell's content in its default app (`NSWorkspace.open`), like F
 
 **Right-click on occupied cell**
 - Reveal in Finder — highlights the cell's file in its bundle folder (v0.6)
-- Delete content
+- Rename… — renames the **actual file on disk** (keeps the extension), not just the
+  label; a small popover takes the new name (v0.10)
+- Delete Content — shown in **red** to flag it as destructive (trashes the file, v0.10)
 - More (TBD)
 
 ## Cell content types
@@ -282,6 +284,21 @@ No Accessibility permissions required. Works in sandboxed apps.
   clips. Still the single source of truth shared by SwiftUI + AppKit — they can't drift.
 - **Settings popover opens upward** (`arrowEdge: .bottom`) since the gear is now at the
   bottom of the panel; a downward popover would fall off the bottom of the bundle/screen.
+
+### Cell rename + red delete (v0.10)
+- **Rename renames the file on disk**, not just the label. The chain mirrors the existing
+  cell actions: `CellView` → `BundleGridView.onRenameCell(index, name)` →
+  `BundlePanelController` → `BundleManager.renameContent` → `BundleStore.renameContentFile`.
+  The store keeps the original extension, uniquifies the new base name against the folder
+  (same `uniqueName` helper as ingest), and `moveItem`s in place. Manager then updates
+  `storedFilename`; `displayName` follows the new filename for every type **except text**,
+  whose label is a content preview, not the filename.
+- **Rename UI is a popover with a `TextField`** anchored to the cell, prefilled with the
+  current base name (no extension). The Rename menu item calls `onSelect()` first so the
+  panel becomes key and the field is typeable — same key-window requirement as the settings
+  rename (borderless `KeyablePanel`). Blank names are a no-op.
+- **"Delete Content" is rendered red** via `Text(...).foregroundStyle(.red)` inside the
+  destructive `Button` — the `role: .destructive` alone wasn't coloring it on this macOS.
 
 ### Click-to-select latency (misc fix)
 - **Symptom:** clicking a cell (even an empty one) took ~1s to show the blue ring, while

@@ -19,6 +19,7 @@ struct BundleGridView: View {
     var onBeginDragCell: (Int) -> Void          // cell `Int`'s drag began — record source
     var onOpenCell: (Int) -> Void               // cell `Int` double-clicked — open content
     var onRevealCell: (Int) -> Void             // reveal cell `Int`'s file in Finder
+    var onRenameCell: (Int, String) -> Void     // rename cell `Int`'s file on disk
     var onRevealBundle: () -> Void              // reveal this bundle's folder in Finder
 
     @State private var showingSettings = false
@@ -125,7 +126,8 @@ struct BundleGridView: View {
                                 onDragOut: { onDragOutCell(index) },
                                 onBeginDrag: { onBeginDragCell(index) },
                                 onOpen: { onOpenCell(index) },
-                                onReveal: { onRevealCell(index) }
+                                onReveal: { onRevealCell(index) },
+                                onRename: { onRenameCell(index, $0) }
                             )
                         }
                     }
