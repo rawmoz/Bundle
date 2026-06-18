@@ -22,9 +22,13 @@ An empty container — like an unoccupied lot. One-click selects it (turns blue)
 ## Grid layout
 Bundles are true 2D grids. The user selects dimensions at creation (e.g. 1x5, 3x2, 4x3). Max size is 5x5. The grid determines the number of cells — a 3x2 grid has 6 cells. Grid size can be changed later via bundle settings.
 
-## Bundle header (`:::` handle)
-- **Hold + drag** — moves the bundle anywhere on the desktop, position saves automatically
-- **Click** — opens the bundle settings popover:
+## Bundle controls (title top, buttons bottom)
+The bundle **name** sits in a row at the **top** of the panel. The two controls — a
+`:::` drag handle and a ⚙ gear button — live in a row pinned to the **bottom** of the
+panel, on the right, always below the grid regardless of grid size (v0.10).
+- **`:::` drag handle — drag** moves the bundle anywhere on the desktop, position saves
+  automatically. Drag-only (no tap behavior).
+- **⚙ gear button — click** opens the bundle settings popover (opens upward):
   1. Rename
   2. Change Bundle size (re-opens the Table Grid picker)
   3. Reveal in Finder — opens the bundle's folder (v0.6)
@@ -263,6 +267,21 @@ No Accessibility permissions required. Works in sandboxed apps.
 - **Bundle title** is 14pt semibold @ 85% white (was `.caption`/60%); the grip stays 45% so
   the contrast carries the hierarchy. `BundleLayout.headerHeight` 18→22 for breathing room —
   centralized, so the AppKit frame and SwiftUI layout don't drift.
+
+### Split controls — title top, buttons bottom (v0.10)
+- **The old single `:::` grip did double duty** (tap = settings, hold-drag = move). It's now
+  **two dedicated buttons** in `BundleGridView`: `dragHandle` (the `:::` dots, drag-only) and
+  `settingsButton` (a `gearshape.fill`, tap-only). Splitting them removes the click-vs-drag
+  disambiguation entirely, so the drag handle uses `DragGesture(minimumDistance: 0)` —
+  tracks from touch-down, no dropped-drag race (the v0.9 misc-fix concern is moot here).
+- **Layout is now three rows**, not two: `titleRow` (name, top), `grid` (middle), `footer`
+  (the two buttons, right-aligned, bottom). The footer is pinned to the bottom regardless of
+  grid size because it's the last item in the `VStack`.
+- **Geometry: added `BundleLayout.footerHeight` (16)** and grew `panelSize` by
+  `gap + footerHeight` so the AppKit panel frame matches the extra bottom row and nothing
+  clips. Still the single source of truth shared by SwiftUI + AppKit — they can't drift.
+- **Settings popover opens upward** (`arrowEdge: .bottom`) since the gear is now at the
+  bottom of the panel; a downward popover would fall off the bottom of the bundle/screen.
 
 ### Click-to-select latency (misc fix)
 - **Symptom:** clicking a cell (even an empty one) took ~1s to show the blue ring, while

@@ -31,30 +31,41 @@ struct BundleGridView: View {
                 .onTapGesture { selection.clear() }
 
             VStack(spacing: BundleLayout.gap) {
-                header
+                titleRow
                 grid
+                footer
             }
             .padding(BundleLayout.pad)
         }
     }
 
-    // Title row: bundle name on the left, `:::` grip on the right.
-    private var header: some View {
-        HStack(spacing: 8) {
+    // Top row: bundle name, left-aligned.
+    private var titleRow: some View {
+        HStack {
             Text(bundle.name.isEmpty ? "Untitled" : bundle.name)
                 .font(BundleStyle.headerFont)
                 .foregroundStyle(BundleStyle.headerColor)
                 .lineLimit(1)
                 .truncationMode(.tail)
-            Spacer(minLength: 4)
-            grip
+            Spacer(minLength: 0)
         }
         .frame(height: BundleLayout.headerHeight)
     }
 
-    // The `:::` grip — the only interactive part of the header.
-    // Hold + drag moves the panel; a plain click opens settings.
-    private var grip: some View {
+    // Bottom row: the `:::` drag handle and the gear settings button, on the right.
+    private var footer: some View {
+        HStack(spacing: 8) {
+            Spacer(minLength: 0)
+            dragHandle
+            settingsButton
+        }
+        .frame(height: BundleLayout.footerHeight)
+    }
+
+    // The `:::` drag handle — drag-only, moves the panel. With settings split off
+    // onto its own button there's no tap to disambiguate against, so the gesture
+    // tracks from touch-down (minimumDistance: 0) for an instant, race-free drag.
+    private var dragHandle: some View {
         HStack(spacing: 4) {
             ForEach(0..<3, id: \.self) { _ in
                 VStack(spacing: 3) {
@@ -65,22 +76,28 @@ struct BundleGridView: View {
         }
         .foregroundStyle(BundleStyle.gripColor)
         .contentShape(Rectangle())
-        .onTapGesture {
-            onActivate()
-            showingSettings = true
-        }
         .gesture(
-            // minimumDistance > 0 keeps a still click as a tap (settings) and only
-            // treats actual movement as a drag (move).
-            DragGesture(minimumDistance: 4)
+            DragGesture(minimumDistance: 0)
                 .onChanged { _ in onDragChanged() }
                 .onEnded { _ in onDragEnded() }
         )
-        .popover(isPresented: $showingSettings, arrowEdge: .top) {
-            BundleSettingsView(bundle: bundle, onResize: onResize, onDelete: onDelete,
-                               onPersist: onPersist, onDeleteContent: onDeleteCell,
-                               onReveal: onRevealBundle)
-        }
+    }
+
+    // The gear button — a click opens the settings popover.
+    private var settingsButton: some View {
+        Image(systemName: "gearshape.fill")
+            .font(.system(size: 12))
+            .foregroundStyle(BundleStyle.gripColor)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                onActivate()
+                showingSettings = true
+            }
+            .popover(isPresented: $showingSettings, arrowEdge: .bottom) {
+                BundleSettingsView(bundle: bundle, onResize: onResize, onDelete: onDelete,
+                                   onPersist: onPersist, onDeleteContent: onDeleteCell,
+                                   onReveal: onRevealBundle)
+            }
     }
 
     private var grid: some View {
