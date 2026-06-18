@@ -27,7 +27,8 @@ Bundles are true 2D grids. The user selects dimensions at creation (e.g. 1x5, 3x
 - **Click** — opens the bundle settings popover:
   1. Rename
   2. Change Bundle size (re-opens the Table Grid picker)
-  3. Delete
+  3. Reveal in Finder — opens the bundle's folder (v0.6)
+  4. Delete
 
 ## Cell interaction model
 
@@ -51,6 +52,7 @@ Opens an occupied cell's content in its default app (`NSWorkspace.open`), like F
 - Paste
 
 **Right-click on occupied cell**
+- Reveal in Finder — highlights the cell's file in its bundle folder (v0.6)
 - Delete content
 - More (TBD)
 
@@ -195,6 +197,22 @@ No Accessibility permissions required. Works in sandboxed apps.
   `.onDrop` — only so the drop *fires* for an internal drag; the in-memory value does the work.
 - **Double-click** an occupied cell → `BundleManager.openContent` opens it in the default
   app. The `count: 2` tap gesture is ordered **before** the `count: 1` select gesture.
+
+### Robustness & Reveal in Finder (v0.6, shipped after v0.7/v0.8)
+- **Off-screen recovery** lives in `BundlePanelController.show()`: the saved origin is run
+  through `onScreenOrigin(for:)`, which recenters on `NSScreen.main` only when the panel's
+  frame intersects no screen's `visibleFrame` (a display was unplugged). The corrected
+  origin is written back to `bundle.position` and persisted via `onPersist` so the rescue
+  sticks; a frame still touching any screen is returned unchanged.
+- **Reveal in Finder** is three `NSWorkspace` calls on `BundleManager`, all path-agnostic
+  (they reveal whatever `BundleStore` computes at runtime, never a hard-coded path):
+  `revealBundlesFolder()` (menu-bar, opens the whole `Bundles/`),
+  `revealBundleFolder(_:)` (settings popover, `activateFileViewerSelecting` the bundle dir),
+  `revealContent(bundle:index:)` (occupied-cell right-click, selects the file). Wired to the
+  views as `onRevealBundle` / `onRevealCell` closures through `BundlePanelController` exactly
+  like the existing cell-action closures.
+- **Empty-state prompt** is a conditional `emptyPrompt` view in `HomeMenu`, shown above the
+  menu rows when `manager.bundles.isEmpty` (SwiftUI tracks the `@Observable` read).
 
 ### Keyboard navigation & Quick Look (v0.8)
 - **One keyDown monitor, two branches.** `BundleManager.installKeyboardMonitor` now

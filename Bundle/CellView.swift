@@ -19,6 +19,7 @@ struct CellView: View {
     var onDragOut: () -> Void   // drop was accepted elsewhere — remove from this cell
     var onBeginDrag: () -> Void // this cell's drag started — record it as the source
     var onOpen: () -> Void      // double-click — open the content in its default app
+    var onReveal: () -> Void    // right-click — reveal this cell's file in Finder
 
     @State private var isTargeted = false
 
@@ -51,6 +52,7 @@ struct CellView: View {
             if cell.isEmpty {
                 Button("Paste") { onPaste() }
             } else {
+                Button("Reveal in Finder") { onReveal() }
                 Button("Delete Content", role: .destructive) { onDelete() }
             }
         }

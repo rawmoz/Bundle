@@ -35,6 +35,9 @@ private struct HomeMenu: View {
 
     var body: some View {
         VStack(spacing: 4) {
+            if manager.bundles.isEmpty {
+                emptyPrompt
+            }
             MenuRow(title: "Add new bundle", icon: "plus", action: onAdd)
             MenuRow(title: "Show / Hide", icon: "eye") { manager.toggleAll() }
             MenuRow(title: "Reveal in Finder", icon: "folder") { manager.revealBundlesFolder() }
@@ -42,6 +45,27 @@ private struct HomeMenu: View {
             MenuRow(title: "Quit", icon: "power") { NSApplication.shared.terminate(nil) }
         }
         .padding(12)
+    }
+
+    // First-launch friendly prompt — shown above the menu when no bundles exist yet so
+    // the popover doesn't open looking bare and inert.
+    private var emptyPrompt: some View {
+        VStack(spacing: 6) {
+            Image(systemName: "square.grid.2x2")
+                .font(.system(size: 26))
+                .foregroundStyle(.secondary)
+            Text("No bundles yet")
+                .font(.headline)
+            Text("Create your first bundle to collect files, folders, and notes on your desktop.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 4)
+        .padding(.top, 6)
+        .padding(.bottom, 14)
     }
 }
 

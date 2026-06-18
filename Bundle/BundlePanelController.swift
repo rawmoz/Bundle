@@ -71,7 +71,9 @@ final class BundlePanelController {
             onDeleteCell: { [weak manager] index in manager?.deleteContent(bundle: bundle, index: index) },
             onDragOutCell: { [weak manager] index in manager?.moveOutContent(bundle: bundle, index: index) },
             onBeginDragCell: { [weak manager] index in manager?.beginCellDrag(bundle: bundle, index: index) },
-            onOpenCell: { [weak manager] index in manager?.openContent(bundle: bundle, index: index) }
+            onOpenCell: { [weak manager] index in manager?.openContent(bundle: bundle, index: index) },
+            onRevealCell: { [weak manager] index in manager?.revealContent(bundle: bundle, index: index) },
+            onRevealBundle: { [weak manager] in manager?.revealBundleFolder(bundle) }
         )
         hosting = NSHostingView(rootView: view)
         hosting.frame = NSRect(origin: .zero, size: size)
@@ -99,12 +101,32 @@ final class BundlePanelController {
 
     func show() {
         if let pos = bundle.position {
-            panel.setFrameOrigin(pos)
+            let corrected = onScreenOrigin(for: pos)
+            panel.setFrameOrigin(corrected)
+            // The saved spot was off every display (e.g. an external screen was
+            // disconnected) and got recentered — persist the rescue so it sticks.
+            if corrected != pos {
+                bundle.position = corrected
+                onPersist?()
+            }
         } else {
             panel.center()
             bundle.position = panel.frame.origin
         }
         panel.orderFront(nil)
+    }
+
+    // Keep a restored bundle reachable: if its saved frame doesn't land on any current
+    // display, it's stranded (a display was unplugged since last launch), so recenter it
+    // on the main display. A frame that still touches a screen is left exactly as saved.
+    private func onScreenOrigin(for origin: CGPoint) -> CGPoint {
+        let frame = CGRect(origin: origin, size: panel.frame.size)
+        if NSScreen.screens.contains(where: { $0.visibleFrame.intersects(frame) }) {
+            return origin
+        }
+        guard let visible = NSScreen.main?.visibleFrame else { return origin }
+        return CGPoint(x: visible.midX - frame.width / 2,
+                       y: visible.midY - frame.height / 2)
     }
 
     func hide() { panel.orderOut(nil) }

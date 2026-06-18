@@ -18,6 +18,8 @@ struct BundleGridView: View {
     var onDragOutCell: (Int) -> Void            // cell `Int` was dragged out — clear it
     var onBeginDragCell: (Int) -> Void          // cell `Int`'s drag began — record source
     var onOpenCell: (Int) -> Void               // cell `Int` double-clicked — open content
+    var onRevealCell: (Int) -> Void             // reveal cell `Int`'s file in Finder
+    var onRevealBundle: () -> Void              // reveal this bundle's folder in Finder
 
     @State private var showingSettings = false
 
@@ -76,7 +78,8 @@ struct BundleGridView: View {
         )
         .popover(isPresented: $showingSettings, arrowEdge: .top) {
             BundleSettingsView(bundle: bundle, onResize: onResize, onDelete: onDelete,
-                               onPersist: onPersist, onDeleteContent: onDeleteCell)
+                               onPersist: onPersist, onDeleteContent: onDeleteCell,
+                               onReveal: onRevealBundle)
         }
     }
 
@@ -104,7 +107,8 @@ struct BundleGridView: View {
                                 onDelete: { onDeleteCell(index) },
                                 onDragOut: { onDragOutCell(index) },
                                 onBeginDrag: { onBeginDragCell(index) },
-                                onOpen: { onOpenCell(index) }
+                                onOpen: { onOpenCell(index) },
+                                onReveal: { onRevealCell(index) }
                             )
                         }
                     }
@@ -121,6 +125,7 @@ private struct BundleSettingsView: View {
     var onDelete: () -> Void
     var onPersist: () -> Void
     var onDeleteContent: (Int) -> Void   // trash a cell's file + clear it (for shrink)
+    var onReveal: () -> Void             // reveal this bundle's folder in Finder
 
     @State private var columns: Int
     @State private var rows: Int
@@ -128,12 +133,14 @@ private struct BundleSettingsView: View {
     @State private var droppedCount = 0
 
     init(bundle: BundleState, onResize: @escaping () -> Void, onDelete: @escaping () -> Void,
-         onPersist: @escaping () -> Void, onDeleteContent: @escaping (Int) -> Void) {
+         onPersist: @escaping () -> Void, onDeleteContent: @escaping (Int) -> Void,
+         onReveal: @escaping () -> Void) {
         self.bundle = bundle
         self.onResize = onResize
         self.onDelete = onDelete
         self.onPersist = onPersist
         self.onDeleteContent = onDeleteContent
+        self.onReveal = onReveal
         _columns = State(initialValue: bundle.columns)
         _rows = State(initialValue: bundle.rows)
     }
@@ -158,6 +165,12 @@ private struct BundleSettingsView: View {
             .onChange(of: columns * 100 + rows) { _, _ in sizeChanged() }
 
             Divider()
+
+            Button(action: onReveal) {
+                Label("Reveal in Finder", systemImage: "folder")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
 
             Button(role: .destructive, action: onDelete) {
                 Label("Delete Bundle", systemImage: "trash")

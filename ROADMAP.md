@@ -200,28 +200,39 @@ Shipped as part of v0.4 — see the "Move vs. delete semantics" and gotchas abov
 
 ---
 
-## v0.6 — Robustness & Reveal in Finder
+## v0.6 — Robustness & Reveal in Finder ✅ (2026-06-18)
 **Goal:** close the functional gaps that make the app safe and complete to use daily —
 no cosmetics. (Animations and the visual-consistency pass were split out to **v0.9**: it's
 wasted effort to polish UI and freeze typography/spacing while v0.7/v0.8 are still adding
 interactions. Polish lands once the feature set is frozen.)
 
-- **Off-screen bundle recovery** — on launch, if a bundle's saved position falls outside
-  all current screen bounds (e.g. an external display was disconnected), auto-move it onto
-  the main display so it's never stranded where the user can't reach it. A robustness fix,
-  not a nicety.
-- **Reveal in Finder** — a menu item (bundle settings, and right-click on an occupied
-  cell) that opens that bundle's folder in Finder via
+- **Off-screen bundle recovery** ✅ — `BundlePanelController.show()` runs the saved origin
+  through `onScreenOrigin(for:)`: if the panel's frame intersects no current display's
+  `visibleFrame` (e.g. an external display was disconnected), it recenters on the main
+  display and **persists the rescue** (`onPersist`) so it sticks; a frame still touching any
+  screen is left exactly as saved. A robustness fix, not a nicety. *(Implemented; not
+  user-verified — needs an actual display disconnect to trigger.)*
+- **Reveal in Finder** ✅ — opens a folder in Finder via
   `NSWorkspace.activateFileViewerSelecting(...)`. The single seamless way for a user to
-  reach/recover their actual files without ever typing a path. **Path-agnostic by design:**
-  it reveals whatever folder `BundleStore` computes at runtime (`directory(for:)`), so it's
-  automatically correct per-user and whether the app is sandboxed (container path) or not
-  (clean `~/Library` path). Never hard-code the location.
-- **Empty state in the popover** — when no bundles exist yet, the menu-bar popover shows a
-  friendly prompt instead of a bare list.
+  reach/recover their actual files without ever typing a path. Three surfaces:
+  - **Bundle settings** popover → `revealBundleFolder(_:)` selects that bundle's folder.
+  - **Right-click an occupied cell** → `revealContent(bundle:index:)` highlights that file.
+  - (Pre-existing) menu-bar top-level → `revealBundlesFolder()` opens the whole `Bundles/`.
+  **Path-agnostic by design:** all reveal whatever `BundleStore` computes at runtime
+  (`directory(for:)` / `contentFileURL`), so they're automatically correct per-user and
+  whether the app is sandboxed (container path) or not (clean `~/Library` path). Never
+  hard-code the location.
+- **Empty state in the popover** ✅ — `HomeMenu` shows a friendly prompt (grid icon, "No
+  bundles yet", one-line invite) above the menu rows when `manager.bundles.isEmpty`, instead
+  of a bare list. *(Implemented; not user-verified — only visible with zero bundles.)*
 
-**Done when:** a disconnected display never strands a bundle, users can jump to their files
-in Finder, and a first-launch popover isn't empty-looking.
+**Files touched:** `BundleManager` (`revealBundleFolder`/`revealContent`),
+`BundlePanelController` (`onScreenOrigin`), `BundleGridView` + `CellView` (reveal closures +
+menu/button), `MenuBarView` (empty prompt).
+
+**Done when:** ✅ a disconnected display never strands a bundle, users can jump to their files
+in Finder (confirmed working on cells + settings), and a first-launch popover isn't
+empty-looking.
 
 ---
 

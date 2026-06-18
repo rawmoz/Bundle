@@ -69,6 +69,22 @@ final class BundleManager {
         NSWorkspace.shared.open(store.bundlesURL)
     }
 
+    // Reveal a single bundle's folder in Finder, selected inside the Bundles directory
+    // (from the bundle's settings popover). Path-agnostic — directory(for:) is whatever
+    // BundleStore computes at runtime, so it's correct sandboxed or not.
+    func revealBundleFolder(_ bundle: BundleState) {
+        NSWorkspace.shared.activateFileViewerSelecting([store.directory(for: bundle.id)])
+    }
+
+    // Reveal an occupied cell's file in Finder, highlighted inside its bundle's folder
+    // (right-click on the cell). The seamless way to reach the real file behind a cell.
+    func revealContent(bundle: BundleState, index: Int) {
+        guard index < bundle.cells.count,
+              let filename = bundle.cells[index].storedFilename else { return }
+        NSWorkspace.shared.activateFileViewerSelecting(
+            [store.contentFileURL(for: bundle.id, filename: filename)])
+    }
+
     // Open an occupied cell's content in its default app (double-click, like Finder).
     func openContent(bundle: BundleState, index: Int) {
         guard index < bundle.cells.count,
