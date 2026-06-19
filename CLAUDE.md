@@ -332,6 +332,30 @@ No Accessibility permissions required. Works in sandboxed apps.
   renaming a folder in Finder isn't picked up live and gets reverted to the bundle name on the
   next launch (manifest wins). A two-way sync would need an FSEvents watcher — deferred.
 
+### Multi-file paste — spill fill (v0.11)
+- **The bug it fixes:** `paste(into:index:)` read `urls.first` / `images.first`, so copying
+  N files and `⌘V`-ing dropped all but the first **silently**. Now it reads the whole array
+  and spreads it across cells.
+- **`spillFill(_:into:from:ingest:)`** is the shared engine: it collects the empty cells at
+  or after the selected cell in **row-major reading order** (`emptyCellIndices`) — ascending
+  flat index *is* left→right, top→bottom — and ingests one item per cell, skipping occupied
+  ones. Built generic on `T` with an `ingest` closure so **v0.12 drag-in reuses it** by
+  feeding dragged URLs instead of clipboard URLs.
+- **All-or-nothing (shipped decision, differs from the original ROADMAP).** If the empty
+  cells forward of the selection can't hold the **whole** batch, nothing is placed and a
+  toast says how many are free. (The plan was "fill what fits + notice the rest"; partial
+  fills were confusing.) This also makes the move-based v0.12 safe for free — a batch that
+  can't fully fit never relocates anything off its source.
+- **Batched save.** `fillCell` and the three `ingest*` helpers gained `save: Bool = true`;
+  the paste loop fills with `save: false` and writes the manifest **once** at the end instead
+  of N times. Single-file paste/drop callers keep the default (save each time), unchanged.
+- **The notice is a `Toast`** (`Toast.swift`) — a standalone borderless, click-through,
+  floating `NSPanel` that fades a frosted capsule in over the bundle and dismisses itself.
+  Decoupled from the grid so any call site can use it without threading through the cell
+  closures; styled via `BundleStyle`. `BundlePanelController` exposes `frame` so the toast
+  anchors above the right bundle. The full-cell-selected no-op still falls through to a
+  system beep (the top guard returns false → `⌘V` un-handled), no toast needed there.
+
 ### Click-to-select latency (misc fix)
 - **Symptom:** clicking a cell (even an empty one) took ~1s to show the blue ring, while
   arrow-key selection was instant. Cause: the cell had `.onTapGesture(count: 2)` (open) and

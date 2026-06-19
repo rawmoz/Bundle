@@ -433,7 +433,7 @@ rename on disk + red Delete Content, and human-readable bundle folder names.
 
 ---
 
-## v0.11 — Multi-file paste (spill fill)
+## v0.11 — Multi-file paste (spill fill) ✅ (2026-06-19)
 **Goal:** pasting multiple files at once fills multiple cells instead of silently keeping
 only the first. Today, copying 2 (or 8) files and `⌘V`-ing into a cell pastes **only the
 first** — the rest are dropped silently. That's the actual bug this fixes.
@@ -455,11 +455,12 @@ first** — the rest are dropped silently. That's the actual bug this fixes.
   cell). Fully backward-compatible.
 
 ### Edge cases
-- **More files than empty cells (overflow).** Fill every available empty cell in reading
-  order, then **stop and show a notice** (e.g. "5 of 8 files added — bundle is full").
-  Nothing is lost: paste is a **copy** (per the v0.4 move/delete semantics), so the leftover
-  files are still on the Desktop untouched. Overflow is safe and recoverable by design — the
-  fix is to *tell* the user, not silently swallow (today's silent-drop is the real bug).
+- **More files than empty cells (overflow) → all-or-nothing.** If the whole batch can't fit
+  in the empty cells forward of the selection, **paste nothing** and show a notice (e.g.
+  "Not enough room for 8 — only 5 free"). *(Shipped decision — the original plan was to fill
+  what fits and notice the rest; a partial fill was confusing, so it's all-or-nothing.* This
+  matters for v0.12: drag-in is a **move**, and all-or-nothing means a batch that can't fully
+  fit never relocates anything off the source.) Either way nothing is lost — paste is a copy.
 - **No empty cells at all** (full bundle, or a full cell selected) → nothing pastes; brief
   notice / beep so it's not a confusing no-op.
 - **Mixed file types in one paste** (PDFs + images + folders together) → already handled.
@@ -477,11 +478,14 @@ first** — the rest are dropped silently. That's the actual bug this fixes.
 - Selection stays on the originally selected cell (least surprising). No model, storage, or
   window changes.
 
-**Files touched (planned):** `BundleManager` (`paste` spill loop + overflow notice).
+**Files touched:** `BundleManager` (`paste` spill engine + all-or-nothing notice),
+`Toast.swift` (new — the frosted notice), `BundlePanelController` (expose `frame` to anchor
+the toast).
 
-**Done when:** copying N files and pasting into a cell fills N empty cells in reading order
-starting from the selection, skips occupied cells, and on overflow fills what fits and tells
-the user how many didn't (with the rest safely untouched on disk).
+**Done when:** ✅ copying N files and pasting into a cell fills N empty cells in reading order
+starting from the selection, skipping occupied cells; if the whole batch won't fit, nothing
+is pasted and a toast says how many cells are free. The fill engine (`spillFill`) is shared,
+ready for v0.12 drag-in to reuse.
 
 ---
 
@@ -525,8 +529,48 @@ a multi-file drag, like paste, keeps only the first.
 URLs), `BundleManager` (reuse v0.11 fill engine for dragged URLs).
 
 **Done when:** dragging N files from Finder onto a cell fills N empty cells in reading order
-from the drop target, skips occupied cells, and on overflow moves only what fits while
-leaving the un-placed files untouched at their source.
+from the drop target, skipping occupied cells. Per the v0.11 all-or-nothing decision, a batch
+that won't fully fit is dropped entirely — and because drag-in is a **move**, that means
+nothing is relocated off the source unless the whole batch lands.
+
+---
+
+## v0.13 — Resize keeps grid orientation
+**Goal:** changing a bundle's size keeps each cell's content in the **same visual position**.
+Today, shrinking (or growing) the grid can reflow content that the resize didn't visually
+touch — e.g. removing the rightmost column of a 3×N grid shifts the *other* columns' items
+around, because content is preserved by **flat array index**, not by row/column.
+
+### The bug
+`BundlePanel.resize` (in `Models.swift`) preserves cells **by index**: it `prefix`-trims or
+appends trailing slots on the flat `cells` array. But the flat index encodes position as
+`index = row * columns + col`, so the moment `columns` changes, every item's `(row, col)`
+remaps — content visually jumps even in cells the user didn't remove. Dropping the rightmost
+column should leave columns 0…n−2 exactly where they are; instead everything reflows.
+
+### Behavior
+- **Preserve by `(row, col)`, not by flat index.** On resize, map each occupied cell from its
+  old `(row, col)` to the *same* `(row, col)` in the new grid. A cell whose row or column no
+  longer exists in the smaller grid is the only content affected.
+- **Shrink** drops only the cells that fall **outside** the new bounds (the trimmed rightmost
+  columns / bottom rows) — every cell still inside keeps its exact spot.
+- **Grow** keeps every existing cell in place and the new cells appear empty (bottom/right).
+- **Dropped-content guard stays.** The existing confirm-before-trashing-filled-cells alert
+  (v0.4) still applies, but now it triggers on cells outside the new 2D bounds, not trailing
+  flat-array slots.
+
+### Why it's contained
+- The fix lives in **`resize`** — rebuild `cells` as a new `columns × rows` array, copying
+  each old cell into `newIndex = row * newColumns + col` when `row < newRows && col < newColumns`.
+- No storage format change: the manifest already stores cells by index; it's just written
+  from the correctly-remapped array. No window/UI change beyond what already redraws on resize.
+
+**Files touched (planned):** `BundlePanel.resize` (`Models.swift`); possibly the shrink-confirm
+check in `BundleManager` if it counts dropped cells.
+
+**Done when:** resizing a bundle leaves every cell still within the new bounds in its original
+visual position — shrinking the grid only removes the trimmed edge cells, and growing only adds
+empty ones, with no reflow of untouched content.
 
 ---
 

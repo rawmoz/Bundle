@@ -124,19 +124,61 @@ final class BundleManager {
     func paste(into bundle: BundleState, index: Int) -> Bool {
         guard index < bundle.cells.count, bundle.cells[index].isEmpty else { return false }
         let pb = NSPasteboard.general
+        // Multiple files spill-fill forward across empty cells from the selection (v0.11);
+        // a single file behaves exactly as before. Paste is a copy, so any overflow leaves
+        // the originals untouched on disk.
         if let urls = pb.readObjects(forClasses: [NSURL.self],
                                      options: [.urlReadingFileURLsOnly: true]) as? [URL],
-           let url = urls.first {
-            return ingestURL(url, move: false, into: bundle, index: index)
+           !urls.isEmpty {
+            return spillFill(urls, into: bundle, from: index) {
+                self.ingestURL($0, move: false, into: bundle, index: $1, save: false)
+            }
         }
         if let images = pb.readObjects(forClasses: [NSImage.self], options: nil) as? [NSImage],
-           let image = images.first {
-            return ingestImage(image, into: bundle, index: index)
+           !images.isEmpty {
+            return spillFill(images, into: bundle, from: index) {
+                self.ingestImage($0, into: bundle, index: $1, save: false)
+            }
         }
         if let text = pb.string(forType: .string) {
-            return ingestText(text, into: bundle, index: index)
+            return ingestText(text, into: bundle, index: index)   // text is always single
         }
         return false
+    }
+
+    // v0.11 spill-fill engine (reused by v0.12 drag-in): place `items` one per empty cell,
+    // walking forward from `start` in row-major reading order — ascending index *is* the
+    // grid's reading order, so this is left→right, top→bottom. Occupied cells are skipped,
+    // the walk never wraps backward, and the manifest is written once at the end rather
+    // than per item. `ingest` runs only for items that found a cell, so a move-based source
+    // (drag-in) never relocates anything it can't place.
+    //
+    // All-or-nothing: if there aren't enough empty cells (forward of `start`) for the whole
+    // batch, nothing is placed — we tell the user and bail rather than partially filling.
+    // Returns true if the batch was placed.
+    @discardableResult
+    private func spillFill<T>(_ items: [T], into bundle: BundleState, from start: Int,
+                              ingest: (T, Int) -> Bool) -> Bool {
+        let slots = emptyCellIndices(in: bundle, from: start)
+        guard slots.count >= items.count else {
+            notify("Not enough room for \(items.count) — only \(slots.count) free", for: bundle)
+            return false
+        }
+        for (item, index) in zip(items, slots) { _ = ingest(item, index) }
+        save(bundle)
+        return true
+    }
+
+    // Indices of empty cells at or after `start`, in row-major reading order.
+    private func emptyCellIndices(in bundle: BundleState, from start: Int) -> [Int] {
+        guard start < bundle.cells.count else { return [] }
+        return (start..<bundle.cells.count).filter { bundle.cells[$0].isEmpty }
+    }
+
+    // Brief, non-blocking notice anchored over a bundle — used when a paste/drag-in can't
+    // place everything (overflow) so a partial fill isn't silent.
+    private func notify(_ message: String, for bundle: BundleState) {
+        Toast.show(message, over: controllers[bundle.id]?.frame)
     }
 
     // Copy an occupied cell's content to the clipboard, exactly like copying it in Finder.
@@ -246,26 +288,29 @@ final class BundleManager {
     // MARK: - Ingest helpers
 
     @discardableResult
-    private func ingestURL(_ url: URL, move: Bool, into bundle: BundleState, index: Int) -> Bool {
+    private func ingestURL(_ url: URL, move: Bool, into bundle: BundleState, index: Int,
+                           save: Bool = true) -> Bool {
         guard let filename = store.ingest(at: url, move: move, into: bundle.id) else { return false }
         fillCell(bundle, index, type: contentType(for: url),
-                 filename: filename, display: url.lastPathComponent)
+                 filename: filename, display: url.lastPathComponent, save: save)
         return true
     }
 
     @discardableResult
-    private func ingestImage(_ image: NSImage, into bundle: BundleState, index: Int) -> Bool {
+    private func ingestImage(_ image: NSImage, into bundle: BundleState, index: Int,
+                             save: Bool = true) -> Bool {
         guard let filename = store.saveImage(image, into: bundle.id) else { return false }
-        fillCell(bundle, index, type: .image, filename: filename, display: filename)
+        fillCell(bundle, index, type: .image, filename: filename, display: filename, save: save)
         return true
     }
 
     @discardableResult
-    private func ingestText(_ text: String, into bundle: BundleState, index: Int) -> Bool {
+    private func ingestText(_ text: String, into bundle: BundleState, index: Int,
+                            save: Bool = true) -> Bool {
         guard let filename = store.saveText(text, into: bundle.id) else { return false }
         let display = String(text.prefix(25))
         fillCell(bundle, index, type: .text, filename: filename,
-                 display: display.isEmpty ? "Text" : display)
+                 display: display.isEmpty ? "Text" : display, save: save)
         return true
     }
 
@@ -278,12 +323,13 @@ final class BundleManager {
     }
 
     private func fillCell(_ bundle: BundleState, _ index: Int,
-                          type: CellContentType, filename: String, display: String) {
+                          type: CellContentType, filename: String, display: String,
+                          save: Bool = true) {
         guard index < bundle.cells.count else { return }
         bundle.cells[index].contentType = type
         bundle.cells[index].storedFilename = filename
         bundle.cells[index].displayName = display
-        save(bundle)
+        if save { self.save(bundle) }
     }
 
     private func clearCell(_ bundle: BundleState, _ index: Int) {

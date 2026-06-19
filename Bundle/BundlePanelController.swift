@@ -36,6 +36,10 @@ final class BundlePanelController {
 
     var isVisible: Bool { panel.isVisible }
 
+    // The panel's current screen frame — used to anchor a transient notice over the
+    // bundle (e.g. the v0.11 multi-file paste overflow toast).
+    var frame: NSRect { panel.frame }
+
     init(bundle: BundleState, selection: SelectionStore, manager: BundleManager) {
         self.bundle = bundle
         self.manager = manager
