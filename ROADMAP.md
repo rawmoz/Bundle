@@ -536,17 +536,21 @@ nothing is relocated off the source unless the whole batch lands.
 ---
 
 ## v0.13 — Resize keeps grid orientation
-**Goal:** changing a bundle's size keeps each cell's content in the **same visual position**.
-Today, shrinking (or growing) the grid can reflow content that the resize didn't visually
-touch — e.g. removing the rightmost column of a 3×N grid shifts the *other* columns' items
-around, because content is preserved by **flat array index**, not by row/column.
+**Goal:** changing a bundle's size — in **either dimension, columns and/or rows, together or
+separately** — keeps each cell's content in the **same visual position**. Today, shrinking (or
+growing) the grid can reflow content that the resize didn't visually touch, because content is
+preserved by **flat array index**, not by `(row, col)`.
 
 ### The bug
 `BundlePanel.resize` (in `Models.swift`) preserves cells **by index**: it `prefix`-trims or
 appends trailing slots on the flat `cells` array. But the flat index encodes position as
-`index = row * columns + col`, so the moment `columns` changes, every item's `(row, col)`
-remaps — content visually jumps even in cells the user didn't remove. Dropping the rightmost
-column should leave columns 0…n−2 exactly where they are; instead everything reflows.
+`index = row * columns + col`, so the moment **`columns` changes** every item's `(row, col)`
+remaps and the whole grid reflows. (Changing **only `rows`** — same column count — is the one
+case that happens to survive today, since trailing flat slots *are* the bottom rows; but the
+fix must handle row and column changes uniformly, including both at once.) Examples that should
+*not* reflow untouched cells: dropping the rightmost column of a 3×N grid (columns 0…n−2 stay
+put), trimming the bottom row, or shrinking both at once (e.g. 4×4 → 3×3 keeps the top-left 3×3
+block exactly where it is).
 
 ### Behavior
 - **Preserve by `(row, col)`, not by flat index.** On resize, map each occupied cell from its
