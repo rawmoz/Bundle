@@ -67,15 +67,23 @@ final class BundleState: Identifiable {
     // index: growing appends empty trailing slots, shrinking drops trailing slots.
     // A dropped slot's file is left on disk (orphaned, not deleted) so nothing is
     // ever silently destroyed by a resize.
-    func resize(columns: Int, rows: Int) {
-        let newCount = columns * rows
-        if newCount < cells.count {
-            cells = Array(cells.prefix(newCount))
-        } else if newCount > cells.count {
-            cells.append(contentsOf: (cells.count..<newCount).map { _ in CellState() })
+    func resize(columns newColumns: Int, rows newRows: Int) {
+        // Preserve content by (row, col), not by flat index. Each occupied cell keeps its
+        // exact visual position; only cells whose row or column no longer exists in the new
+        // grid are dropped (the trimmed rightmost columns / bottom rows). Mapping by flat
+        // index would re-flow the whole grid whenever `columns` changes (v0.13).
+        let oldColumns = columns
+        var newCells = (0..<(newColumns * newRows)).map { _ in CellState() }
+        for (oldIndex, cell) in cells.enumerated() {
+            let row = oldIndex / oldColumns
+            let col = oldIndex % oldColumns
+            if row < newRows && col < newColumns {
+                newCells[row * newColumns + col] = cell
+            }
         }
-        self.columns = columns
-        self.rows = rows
+        cells = newCells
+        columns = newColumns
+        rows = newRows
     }
 }
 

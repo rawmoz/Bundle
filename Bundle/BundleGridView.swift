@@ -217,10 +217,7 @@ private struct BundleSettingsView: View {
     // first; otherwise apply immediately.
     private func sizeChanged() {
         guard columns != bundle.columns || rows != bundle.rows else { return }
-        let newCount = columns * rows
-        droppedCount = bundle.cells.enumerated()
-            .filter { $0.offset >= newCount && !$0.element.isEmpty }
-            .count
+        droppedCount = droppedIndices().count
         if droppedCount > 0 {
             showShrinkAlert = true
         } else {
@@ -231,12 +228,25 @@ private struct BundleSettingsView: View {
     private func commitSize() {
         // Trash the files of any filled cells that are about to fall off the grid, then
         // resize. Trashed (recoverable), consistent with delete-content / delete-bundle.
-        let newCount = columns * rows
-        for i in bundle.cells.indices where i >= newCount && !bundle.cells[i].isEmpty {
+        for i in droppedIndices() {
             onDeleteContent(i)
         }
         bundle.resize(columns: columns, rows: rows)
         onResize()
+    }
+
+    // Flat indices of filled cells that fall outside the new 2D bounds — the trimmed
+    // rightmost columns / bottom rows. Computed by (row, col) against the *old* column
+    // count so it matches what BundlePanel.resize actually drops (v0.13).
+    private func droppedIndices() -> [Int] {
+        let oldColumns = bundle.columns
+        return bundle.cells.enumerated()
+            .filter { index, cell in
+                let row = index / oldColumns
+                let col = index % oldColumns
+                return (row >= rows || col >= columns) && !cell.isEmpty
+            }
+            .map(\.offset)
     }
 
     // User cancelled a shrink — snap the picker back to the bundle's actual size.
