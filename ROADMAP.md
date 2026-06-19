@@ -489,7 +489,7 @@ ready for v0.12 drag-in to reuse.
 
 ---
 
-## v0.12 — Multi-file drag-in (spill fill, part 2)
+## v0.12 — Multi-file drag-in (spill fill, part 2) ✅ (2026-06-19)
 **Goal:** dragging multiple files onto a cell spreads them across cells exactly like the
 v0.11 paste — same "fill empty cells in reading order from the drop target" behavior. Today
 a multi-file drag, like paste, keeps only the first.
@@ -525,13 +525,18 @@ a multi-file drag, like paste, keeps only the first.
 - Reuse the v0.11 fill helper rather than re-deriving the walk, so paste and drag-in can't
   drift apart.
 
-**Files touched (planned):** `CellView` / `BundleGridView` (drop handler feeds multiple
-URLs), `BundleManager` (reuse v0.11 fill engine for dragged URLs).
+**Files touched (actual):** `BundleManager` only — `drop(...)` routes dragged file URLs
+through the v0.11 `spillFill` engine with `move: true`, and `dragFileURL()` became
+`dragFileURLs()` (whole array off the drag pasteboard). The planned `CellView`/`BundleGridView`
+changes weren't needed: the URLs are read off the drag pasteboard, not the `NSItemProvider`
+array the views pass through, so the view layer is untouched.
 
-**Done when:** dragging N files from Finder onto a cell fills N empty cells in reading order
+**Done when:** ✅ dragging N files from Finder onto a cell fills N empty cells in reading order
 from the drop target, skipping occupied cells. Per the v0.11 all-or-nothing decision, a batch
 that won't fully fit is dropped entirely — and because drag-in is a **move**, that means
-nothing is relocated off the source unless the whole batch lands.
+nothing is relocated off the source unless the whole batch lands. The internal cell→cell
+rearrange (v0.7) is unaffected — it carries no file URLs, so `dragFileURLs().isEmpty` still
+routes it through `pendingCellDrag`.
 
 ---
 

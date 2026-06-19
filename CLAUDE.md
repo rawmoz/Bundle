@@ -356,6 +356,27 @@ No Accessibility permissions required. Works in sandboxed apps.
   anchors above the right bundle. The full-cell-selected no-op still falls through to a
   system beep (the top guard returns false → `⌘V` un-handled), no toast needed there.
 
+### Multi-file drag-in — spill fill, part 2 (v0.12)
+- **The bug it fixes:** `drop(...)` read `dragFileURL()` (just `.first`), so dragging N files
+  from Finder onto a cell silently kept only the first — the drag-in twin of the v0.11 paste
+  bug. Now it reads every dragged URL and spill-fills them.
+- **Reuses the v0.11 engine verbatim.** The file branch of `drop` now calls the same
+  `spillFill(_:into:from:ingest:)` with `move: true`, so dragged files spread forward across
+  empty cells from the drop target in row-major reading order, identical to paste — only the
+  *source* of the URLs differs (drag pasteboard vs. clipboard). Single dragged file is
+  unchanged (fills just the drop-target cell).
+- **All-or-nothing makes the move safe for free.** `spillFill` checks capacity *before*
+  ingesting anything, and `ingestURL(move: true)` (the copy-in-then-Trash-original) runs only
+  for items that got a slot. So an overflowing batch places nothing and therefore moves
+  nothing off its source — a file with no destination is never removed (v0.4 move semantics).
+- **`dragFileURL()` → `dragFileURLs()`** now returns the whole `[URL]` off the drag
+  pasteboard. The internal cell→cell precedence check just became `dragFileURLs().isEmpty` —
+  an in-app rearrange (v0.7) still carries no file URLs and dispatches via `pendingCellDrag`,
+  so it's completely untouched; the spill only applies to **external** Finder drags.
+- **Contained to `BundleManager` alone.** The ROADMAP predicted `CellView`/`BundleGridView`
+  changes, but because the URLs are read off the drag pasteboard — not the `NSItemProvider`
+  array the views pass through — the view layer needed zero changes.
+
 ### Click-to-select latency (misc fix)
 - **Symptom:** clicking a cell (even an empty one) took ~1s to show the blue ring, while
   arrow-key selection was instant. Cause: the cell had `.onTapGesture(count: 2)` (open) and

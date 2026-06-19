@@ -234,7 +234,7 @@ final class BundleManager {
         // recorded in memory when its drag begins (beginCellDrag). A real Finder file
         // always wins, so a stale value left by a cancelled drag can't hijack an
         // external drop.
-        if let payload = pendingCellDrag, Self.dragFileURL() == nil {
+        if let payload = pendingCellDrag, Self.dragFileURLs().isEmpty {
             pendingCellDrag = nil
             return rearrange(from: payload, toBundle: bundle, toIndex: index)
         }
@@ -243,13 +243,19 @@ final class BundleManager {
         // External content only ever fills an empty cell.
         guard bundle.cells[index].isEmpty, !providers.isEmpty else { return false }
 
-        // A real file on disk (any type, images included) → move it: copy into the
-        // bundle, then Trash the original. We read the file URL straight off the drag
+        // Real files on disk (any type, images included) → move them: copy into the
+        // bundle, then Trash the originals. We read the file URLs straight off the drag
         // pasteboard rather than via item-provider temp representations, which leak
-        // staging folders in the sandbox.
-        if let url = Self.dragFileURL(), url.isFileURL {
-            ingestURL(url, move: true, into: bundle, index: index)
-            return true
+        // staging folders in the sandbox. Multiple dragged files spill-fill forward across
+        // empty cells from the drop target, exactly like multi-file paste (v0.11); a single
+        // file fills just the drop-target cell as before. Drag-in is a move, but spill-fill
+        // is all-or-nothing — on overflow nothing is placed, so nothing is moved off its
+        // source (a file with no destination is never removed — see v0.4 move semantics).
+        let fileURLs = Self.dragFileURLs()
+        if !fileURLs.isEmpty {
+            return spillFill(fileURLs, into: bundle, from: index) {
+                self.ingestURL($0, move: true, into: bundle, index: $1, save: false)
+            }
         }
         // No backing file (image data from a browser, dragged text) → save the raw data,
         // where there is no original to remove.
@@ -257,13 +263,15 @@ final class BundleManager {
         return true
     }
 
-    // The source file URL for the current drag, read directly from the drag pasteboard.
-    // Returns the *real* path for every file type — PDFs, images, folders — without the
-    // file-url conformance gaps and temp-folder artifacts of item-provider loading.
-    private static func dragFileURL() -> URL? {
+    // The source file URLs for the current drag, read directly from the drag pasteboard.
+    // Returns the *real* paths for every file type — PDFs, images, folders — without the
+    // file-url conformance gaps and temp-folder artifacts of item-provider loading. A
+    // multi-file Finder drag yields every URL here (v0.12 spill-fill); the in-app cell→cell
+    // drag yields none, which is how `drop` tells the two apart.
+    private static func dragFileURLs() -> [URL] {
         let urls = NSPasteboard(name: .drag).readObjects(
             forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL]
-        return urls?.first
+        return urls ?? []
     }
 
     // Fallback for drops with no backing file: raw image, then plain text.
