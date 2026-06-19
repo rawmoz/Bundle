@@ -433,6 +433,103 @@ rename on disk + red Delete Content, and human-readable bundle folder names.
 
 ---
 
+## v0.11 — Multi-file paste (spill fill)
+**Goal:** pasting multiple files at once fills multiple cells instead of silently keeping
+only the first. Today, copying 2 (or 8) files and `⌘V`-ing into a cell pastes **only the
+first** — the rest are dropped silently. That's the actual bug this fixes.
+
+### Behavior
+- **Spill-fill in reading order.** Start at the **selected cell**, then walk *forward*
+  through the grid filling one file per empty cell. The grid is a flat **row-major** array
+  (`index = row * columns + col`), so ascending index order *is* left→right, top→bottom
+  ("like a book") — no new geometry needed, it falls out of the existing layout.
+- **Skip occupied cells.** If a later cell is already occupied, skip it and continue to the
+  next empty one (don't stop dead at the first occupied cell). Pasting 4 files when cells 0
+  and 2 are taken fills 1, 3, 4, 5. The selected cell itself must be empty to start (same
+  guard as today).
+- **Forward only, from the selection.** Fill from the selected cell onward; do **not** wrap
+  backward to fill empty cells *before* the selection (backward-fill is surprising). So
+  selecting the top-left cell before a big paste becomes the natural "fill everything"
+  gesture.
+- **Single file → unchanged.** One file behaves exactly like today (fills the selected
+  cell). Fully backward-compatible.
+
+### Edge cases
+- **More files than empty cells (overflow).** Fill every available empty cell in reading
+  order, then **stop and show a notice** (e.g. "5 of 8 files added — bundle is full").
+  Nothing is lost: paste is a **copy** (per the v0.4 move/delete semantics), so the leftover
+  files are still on the Desktop untouched. Overflow is safe and recoverable by design — the
+  fix is to *tell* the user, not silently swallow (today's silent-drop is the real bug).
+- **No empty cells at all** (full bundle, or a full cell selected) → nothing pastes; brief
+  notice / beep so it's not a confusing no-op.
+- **Mixed file types in one paste** (PDFs + images + folders together) → already handled.
+  Finder hands them all over as file URLs and `ingestURL` auto-detects image-vs-file-vs-
+  folder per item, so no special casing.
+
+### Why it's additive, not a rewrite
+- Contained to **one function** — `paste(into:index:)` in `BundleManager`. The change is
+  `urls.first` → a loop over `urls` that advances to the next empty cell each time (same for
+  the images array; text is always single).
+- **Both paste surfaces get it for free** — the `⌘V` keyDown monitor and the right-click
+  Paste menu item both call this one function.
+- **Batch the save** — ingest all N items, then write the manifest **once** at the end
+  instead of N atomic writes.
+- Selection stays on the originally selected cell (least surprising). No model, storage, or
+  window changes.
+
+**Files touched (planned):** `BundleManager` (`paste` spill loop + overflow notice).
+
+**Done when:** copying N files and pasting into a cell fills N empty cells in reading order
+starting from the selection, skips occupied cells, and on overflow fills what fits and tells
+the user how many didn't (with the rest safely untouched on disk).
+
+---
+
+## v0.12 — Multi-file drag-in (spill fill, part 2)
+**Goal:** dragging multiple files onto a cell spreads them across cells exactly like the
+v0.11 paste — same "fill empty cells in reading order from the drop target" behavior. Today
+a multi-file drag, like paste, keeps only the first.
+
+### Why it's the second half, after v0.11
+- **Reuses v0.11's fill engine.** v0.11 builds the core spill logic (forward walk, skip
+  occupied, overflow notice, batched save) in the clean, contained **paste** path. v0.12
+  feeds that same engine from **dragged** URLs instead of clipboard URLs — the fill behavior
+  is identical, only the *source* of the URLs differs.
+- **Drag is the messier path**, which is why it goes second. It reads off the **drag**
+  pasteboard (`NSPasteboard(name: .drag)`) and carries the existing drag history — the -8058
+  sandbox-container error, the drag-OUT file promise, and the in-memory `pendingCellDrag`
+  used for internal cell→cell rearrange (v0.7). Building the spill logic in the easy path
+  first, then applying it here, keeps those two concerns from tangling.
+- **Internal rearrange is unaffected.** A cell→cell drag carries no real file URL
+  (`dragFileURL() == nil`) and is dispatched by the in-memory `pendingCellDrag`, so the
+  multi-file spill only applies to **external** files dragged in from Finder — single-cell
+  move/swap behavior stays exactly as in v0.7.
+
+### Behavior (mirrors v0.11)
+- Start at the **drop-target cell**, fill forward through empty cells in row-major reading
+  order, skipping occupied cells.
+- **Overflow** → fill what fits, notice the rest. Drag-in is a **move** (not a copy), so any
+  files that don't fit must be **left at their source untouched** — only the ones that
+  actually land in a cell are moved/removed. (This is the one real difference from paste,
+  where leftovers are always safe because paste never touches the source.)
+- Single dragged file → unchanged (fills the drop-target cell, as today).
+
+### Care points
+- **Move semantics on overflow** — only relocate the bytes for files that found a cell; a
+  file with no destination is never removed from its source (consistent with v0.4: a move
+  needs a real destination, otherwise nothing happens to the original).
+- Reuse the v0.11 fill helper rather than re-deriving the walk, so paste and drag-in can't
+  drift apart.
+
+**Files touched (planned):** `CellView` / `BundleGridView` (drop handler feeds multiple
+URLs), `BundleManager` (reuse v0.11 fill engine for dragged URLs).
+
+**Done when:** dragging N files from Finder onto a cell fills N empty cells in reading order
+from the drop target, skips occupied cells, and on overflow moves only what fits while
+leaving the un-placed files untouched at their source.
+
+---
+
 ## v1.1 — Custom storage location (idea, tied to v1.0 distribution)
 **Goal:** let the user choose *where* their bundles live — e.g. `~/Documents/Bundle`
 instead of the hidden sandbox container — so the files are reachable in a place of their
