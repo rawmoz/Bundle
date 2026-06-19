@@ -29,7 +29,9 @@ final class BundleManager {
 
     // Reconstruct every bundle saved to disk and show it in its restored position.
     private func loadSavedBundles() {
-        for state in store.loadAll() {
+        let states = store.loadAll()
+        store.adoptHumanFolderNames(for: states)   // migrate legacy UUID folders → human names
+        for state in states {
             bundles.append(state)
             makeController(for: state).show()
         }

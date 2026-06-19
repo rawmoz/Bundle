@@ -73,19 +73,25 @@ Each cell holds one item. Thumbnail and name display underneath:
 | Plain text | Text document icon | First ~25 characters of content |
 
 ## Storage model
-One master `Bundles/` folder holds one UUID-named subdirectory per BundlePanel. Each holds
-a `manifest.json` (name, columns, rows, position, and an array of occupied cells → content
+One master `Bundles/` folder holds one subdirectory per BundlePanel. Each holds a
+`manifest.json` (name, columns, rows, position, and an array of occupied cells → content
 type / stored filename / display name; empty cells omitted) plus the cell content files.
-The human bundle name lives in the manifest, **not** the folder name (names aren't unique,
-can be renamed, may contain illegal chars). Plain text is saved as a `.txt`. Every change
-writes the manifest immediately (tiny, atomic), so a crash never loses content.
+The **UUID inside the manifest is the canonical identity** — folders are named after the
+human bundle name for Finder readability (v0.10), but the name is *derived* from the
+manifest, never the source of truth. Plain text is saved as a `.txt`. Every change writes
+the manifest immediately (tiny, atomic), so a crash never loses content.
+
+**Folder naming (v0.10):** folders used to be UUID-named; now `BundleStore` keeps a folder
+named after the bundle (sanitized + uniquified), renaming it on disk whenever the bundle is
+renamed. See "Human-readable bundle folders" under Implementation notes for the full design,
+the one-way (in-app name → folder) sync direction, and why renaming in Finder isn't supported.
 
 **The app is sandboxed**, so the real path is the container, not the plain `~/Library`:
 ```
 ~/Library/Containers/com.danielramos.Bundle/Data/Library/Application Support/Bundle/
   Bundles/
-    [bundle-uuid]/
-      manifest.json
+    [Bundle Name]/        ← named after the bundle (was [bundle-uuid] pre-v0.10)
+      manifest.json       ← holds the canonical UUID + name
       [cell content files and folders]
 ```
 `FileManager`'s app-support URL resolves to this container automatically — code uses that,
@@ -299,6 +305,32 @@ No Accessibility permissions required. Works in sandboxed apps.
   rename (borderless `KeyablePanel`). Blank names are a no-op.
 - **"Delete Content" is rendered red** via `Text(...).foregroundStyle(.red)` inside the
   destructive `Button` — the `role: .destructive` alone wasn't coloring it on this macOS.
+
+### Human-readable bundle folders (v0.10)
+- **Folders are now named after the bundle**, not the UUID, so `Bundles/` is readable in
+  Finder. The UUID stays the canonical identity (it lives in `manifest.json`); the folder
+  name is purely cosmetic and *derived* from the bundle name. Entirely contained to
+  `BundleStore` plus one line in `BundleManager.loadSavedBundles`.
+- **`folders: [UUID: String]` map** resolves id → current on-disk folder name. `directory(for:)`
+  reads it (falls back to the UUID for an id not yet recorded — a new bundle is recorded by
+  its first `save`). `loadAll` records each folder's actual name; `deleteDirectory` clears it.
+- **`save()` is the single sync chokepoint.** It calls `reconcileFolder`, which renames the
+  folder on disk when the name changed. Because in-app rename persists through `save`
+  (settings popover `.onDisappear { onPersist() }`), the folder follows the name automatically.
+- **Naming rules:** `sanitizeFolderName` strips `/ \ :`, leading dots, trims whitespace,
+  falls back to `Untitled`. `desiredFolderName` adds a Finder-style ` 2`/` 3` suffix when the
+  name collides with another bundle's folder *or any unrelated folder already on disk* — so a
+  hand-made folder in `Bundles/` is stepped around, never clobbered.
+- **Migration is automatic + lazy-safe.** `adoptHumanFolderNames(for:)` runs once at launch
+  (after `loadAll`) and renames legacy UUID folders to human names. Idempotent — bundles
+  already correctly named are untouched.
+- **Failsafe:** a failed folder `moveItem` in `reconcileFolder` returns the *old* folder URL
+  and leaves the map unchanged, so a rename that can't complete never strands content behind
+  a freshly-created empty folder. A subdir without a readable `manifest.json` is skipped by
+  `loadAll` (never loaded, never deleted), so junk in `Bundles/` is inert.
+- **Sync is one-way (in-app name → folder), by design.** There's no folder watcher, so
+  renaming a folder in Finder isn't picked up live and gets reverted to the bundle name on the
+  next launch (manifest wins). A two-way sync would need an FSEvents watcher — deferred.
 
 ### Click-to-select latency (misc fix)
 - **Symptom:** clicking a cell (even an empty one) took ~1s to show the blue ring, while

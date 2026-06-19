@@ -61,22 +61,31 @@ final class BundleStore {
     nonisolated let bundlesURL: URL   // immutable — safe to read off the main actor
     private let fm = FileManager.default
 
+    // id → the bundle's *current* on-disk folder name. Folders are named after the human
+    // bundle name (sanitized + uniquified), not the UUID, so Finder shows readable names.
+    // The UUID stays the canonical key (it lives in manifest.json); this map resolves id →
+    // folder. Populated by loadAll, kept current by save (rename) and deleteDirectory.
+    private var folders: [UUID: String] = [:]
+
     init() {
         let appSupport = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         bundlesURL = appSupport.appendingPathComponent("Bundle/Bundles", isDirectory: true)
         try? fm.createDirectory(at: bundlesURL, withIntermediateDirectories: true)
     }
 
-    // The directory that holds this bundle's manifest and content files.
+    // The directory that holds this bundle's manifest and content files. Resolves through
+    // the folder-name map; falls back to the UUID for an id we haven't recorded yet (a
+    // brand-new bundle is recorded by its first save, before any content is added).
     func directory(for id: UUID) -> URL {
-        bundlesURL.appendingPathComponent(id.uuidString, isDirectory: true)
+        bundlesURL.appendingPathComponent(folders[id] ?? id.uuidString, isDirectory: true)
     }
 
     // Write (or overwrite) the bundle's manifest. Called on create, rename, resize,
-    // move, and any cell content change — manifest always reflects current state.
+    // move, and any cell content change — manifest always reflects current state. Also
+    // the single chokepoint that keeps the folder name in sync with the bundle name:
+    // reconcileFolder renames the folder on disk when the name changed.
     func save(_ bundle: BundleState) {
-        let dir = directory(for: bundle.id)
-        try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
+        let dir = reconcileFolder(for: bundle)
         let manifest = BundleManifest(from: bundle)
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -84,26 +93,91 @@ final class BundleStore {
         try? data.write(to: dir.appendingPathComponent("manifest.json"), options: .atomic)
     }
 
-    // Scan the Bundles directory on launch and rebuild every bundle from its
-    // manifest. Directories without a readable manifest are skipped, not deleted.
+    // Scan the Bundles directory on launch and rebuild every bundle from its manifest.
+    // Directories without a readable manifest are skipped, not deleted. Records each
+    // bundle's actual folder name (could be a legacy UUID or a human name) into the map.
     func loadAll() -> [BundleState] {
         guard let entries = try? fm.contentsOfDirectory(
             at: bundlesURL, includingPropertiesForKeys: nil) else { return [] }
-        return entries.compactMap { entry in
+        var states: [BundleState] = []
+        for entry in entries {
             let manifestURL = entry.appendingPathComponent("manifest.json")
             guard let data = try? Data(contentsOf: manifestURL),
-                  let manifest = try? JSONDecoder().decode(BundleManifest.self, from: data) else {
-                return nil
+                  let manifest = try? JSONDecoder().decode(BundleManifest.self, from: data),
+                  let state = manifest.makeBundleState() else {
+                continue
             }
-            return manifest.makeBundleState()
+            folders[state.id] = entry.lastPathComponent
+            states.append(state)
         }
+        return states
+    }
+
+    // Rename any legacy UUID-named folders to human names (migration for bundles created
+    // before folders were named after the bundle). Safe to call every launch — bundles
+    // already on a correct name are left untouched.
+    func adoptHumanFolderNames(for bundles: [BundleState]) {
+        for bundle in bundles { _ = reconcileFolder(for: bundle) }
     }
 
     // Send the whole bundle directory to the Trash — recoverable, never a hard delete.
     func deleteDirectory(for id: UUID) {
         let dir = directory(for: id)
+        folders[id] = nil
         guard fm.fileExists(atPath: dir.path) else { return }
         try? fm.trashItem(at: dir, resultingItemURL: nil)
+    }
+
+    // Ensure the bundle's folder is named after its (sanitized, unique) name, renaming the
+    // folder on disk if the name changed since the last save. Returns the current dir URL.
+    @discardableResult
+    private func reconcileFolder(for bundle: BundleState) -> URL {
+        let desired = desiredFolderName(for: bundle)
+        let current = folders[bundle.id]
+        let dir = bundlesURL.appendingPathComponent(desired, isDirectory: true)
+        if let current, current != desired {
+            let from = bundlesURL.appendingPathComponent(current, isDirectory: true)
+            if fm.fileExists(atPath: from.path) {
+                // Rename the folder on disk. If the move fails, keep the old folder and
+                // its name rather than creating an empty new folder that orphans content.
+                do { try fm.moveItem(at: from, to: dir) }
+                catch { return from }
+            }
+        }
+        try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
+        folders[bundle.id] = desired
+        return dir
+    }
+
+    // The folder name this bundle should have: its sanitized name, made unique against
+    // other bundles' folders and any unrelated folder already on disk (Finder-style " 2"
+    // suffix). A bundle's own current folder never counts as a collision.
+    private func desiredFolderName(for bundle: BundleState) -> String {
+        let base = Self.sanitizeFolderName(bundle.name)
+        let current = folders[bundle.id]
+        func isFree(_ name: String) -> Bool {
+            if name == current { return true }
+            if folders.contains(where: { $0.key != bundle.id && $0.value == name }) { return false }
+            return !fm.fileExists(atPath: bundlesURL.appendingPathComponent(name).path)
+        }
+        if isFree(base) { return base }
+        var n = 2
+        while true {
+            let candidate = "\(base) \(n)"
+            if isFree(candidate) { return candidate }
+            n += 1
+        }
+    }
+
+    // Make a bundle name safe to use as a folder name: strip path separators and other
+    // illegal characters, collapse whitespace, drop leading dots (which hide the folder),
+    // and fall back to "Untitled" when nothing usable remains.
+    nonisolated static func sanitizeFolderName(_ name: String) -> String {
+        var cleaned = name.components(separatedBy: CharacterSet(charactersIn: "/\\:")).joined(separator: "-")
+        cleaned = cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
+        while cleaned.hasPrefix(".") { cleaned.removeFirst() }
+        cleaned = cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
+        return cleaned.isEmpty ? "Untitled" : cleaned
     }
 
     // MARK: - Cell content
