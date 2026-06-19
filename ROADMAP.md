@@ -656,3 +656,32 @@ dev machine's test bundles, which are throwaway).
   is free forever; the fee is only for friction-free download by others.
 - If sandbox is turned off: write a one-time migration to move existing bundles out of the
   container to the new path (matters only for dev/test data, not first-time users).
+
+### Why this also fixes drag-out into other apps (the "ghost drag" problem)
+**Symptom:** dragging a cell out drops fine into Finder/Desktop but does *nothing* in Chrome,
+Discord, Slack, or most apps — the drag feels like a ghost, not a real file.
+
+**Cause — the sandbox, not a bug.** Because bundle files live inside the private sandbox
+container, Bundle can't put a real `public.file-url` on the drag pasteboard (a raw container
+URL throws Finder **error -8058** and other apps couldn't read inside the container anyway).
+So drag-out uses a **file promise** instead (`NSItemProvider.registerFileRepresentation` in
+`CellView.swift`): an IOU that only delivers the file when the receiver accepts it. **Finder
+and Desktop honor promises; Chromium/Electron apps (Chrome, Discord, Slack, …) don't** — they
+only read a concrete `file-url`/filenames flavor at drop time and ignore the promise, so the
+drop silently fails. Finder itself can drag anywhere precisely because its files sit at a
+real, world-readable path and it drags the actual URL, no promise needed.
+
+| Approach | Drops anywhere? | Sandbox-safe? |
+|---|---|---|
+| Raw file URL (Finder-style) | ✅ yes | ❌ -8058 / unreadable container |
+| File promise (today) | ❌ Finder/Desktop only | ✅ yes |
+
+**The fix is the non-sandboxed (direct-download) route above.** Once files live in a normal
+readable folder (pairs with v1.1 custom storage location), drag-out can switch from a promise
+to a **real-URL drag**, which lands in *any* app byte-for-byte like Finder. There's no
+fully-equivalent fix while sandboxed — staging a copy still lands in the unreadable container,
+and promise-blind apps won't accept it regardless. So this is **not a v0.x task**: it's a
+one-line-ish drag-source change in `CellView.dragProvider()` that becomes possible the moment
+the sandbox comes off. **Mac App Store route → sandbox mandatory → drag-out stays
+promise-only (this limitation is permanent there).** Another concrete reason to weigh
+direct-download for v1.0.
