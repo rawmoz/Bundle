@@ -426,6 +426,13 @@ place. *(Implemented + builds clean; animation feel pending live confirmation in
 
 ---
 
+## Misc changes after v0.9 (unplanned, ad-hoc)
+Small one-off features added on request, not planned milestones — tagged "v0.10" in commits
+and documented in CLAUDE.md: split header (title top / drag + gear buttons bottom), cell
+rename on disk + red Delete Content, and human-readable bundle folder names.
+
+---
+
 ## v1.1 — Custom storage location (idea, tied to v1.0 distribution)
 **Goal:** let the user choose *where* their bundles live — e.g. `~/Documents/Bundle`
 instead of the hidden sandbox container — so the files are reachable in a place of their
