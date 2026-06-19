@@ -187,10 +187,12 @@ No Accessibility permissions required. Works in sandboxed apps.
   `NSURL` drag — dragging a URL out of the sandbox container throws Finder error -8058. The
   promise's load handler fires only on an accepted drop, so a cancelled drag clears nothing;
   on success it's a move (bundle copy permanently deleted via `moveOutContent`).
-- **`resize` preserves cell content by index** (grow appends empty trailing slots, shrink
-  trims). The grid guards `if index < bundle.cells.count` to survive the resize transition
-  (fixed an out-of-bounds crash). Shrinking that would drop *filled* cells shows a confirm
-  alert; confirming trashes those files.
+- **`resize` preserves cell content by `(row, col)`** — see v0.13 (it preserved by flat
+  *index* through v0.12, which re-flowed the grid on any column change). Grow adds empty
+  cells at the bottom/right, shrink drops only the trimmed edge. The grid guards
+  `if index < bundle.cells.count` to survive the resize transition (fixed an out-of-bounds
+  crash). Shrinking that would drop *filled* cells shows a confirm alert; confirming trashes
+  those files.
 - `BundleStore.ingest` runs `nonisolated` static helpers (`uniqueName`) since file ops may
   run off the main actor; the rest of the store is main-actor by default isolation.
 
@@ -376,6 +378,27 @@ No Accessibility permissions required. Works in sandboxed apps.
 - **Contained to `BundleManager` alone.** The ROADMAP predicted `CellView`/`BundleGridView`
   changes, but because the URLs are read off the drag pasteboard — not the `NSItemProvider`
   array the views pass through — the view layer needed zero changes.
+
+### Resize keeps grid orientation (v0.13)
+- **The bug it fixes:** `BundlePanel.resize` preserved cells by **flat array index**
+  (`prefix`-trim / append). Since `index = row * columns + col`, any change to `columns`
+  remapped every cell's `(row, col)` and re-flowed the whole grid — e.g. dropping the right
+  column of a 3×3 slid the top-right cell down to `(1,0)` instead of removing it. Changing
+  only `rows` happened to survive (trailing flat slots *are* the bottom rows).
+- **Fix — preserve by `(row, col)`.** `resize` (`Models.swift`) now rebuilds `cells` as a
+  fresh `newColumns × newRows` array and copies each old cell into `row*newColumns+col`, but
+  only when `row < newRows && col < newColumns`. The top-left block stays put; shrink drops
+  only the trimmed rightmost columns / bottom rows; grow adds empty cells at the bottom/right.
+- **The shrink-confirm had to move in lockstep.** `sizeChanged`/`commitSize`
+  (`BundleGridView.swift`) shared a flat-index test (`>= newCount`) that would now count and
+  trash the *wrong* cells. Both route through a new `droppedIndices()` helper using the same
+  `row >= rows || col >= columns` test **against the old column count** (`bundle.columns`,
+  read before `resize` runs), so the alert count and the trashed files match exactly what
+  `resize` drops. The v0.4 confirm-before-trashing-filled-cells guard is unchanged in spirit
+  — it just triggers on cells outside the new 2D bounds, not trailing flat slots.
+- **No storage/format change.** The manifest still stores cells by index; it's just written
+  from the correctly-remapped array. `resize` is the only place touched besides the confirm
+  helper, and it has a single call site.
 
 ### Click-to-select latency (misc fix)
 - **Symptom:** clicking a cell (even an empty one) took ~1s to show the blue ring, while

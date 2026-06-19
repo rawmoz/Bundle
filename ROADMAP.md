@@ -540,7 +540,7 @@ routes it through `pendingCellDrag`.
 
 ---
 
-## v0.13 — Resize keeps grid orientation
+## v0.13 — Resize keeps grid orientation ✅ (2026-06-19)
 **Goal:** changing a bundle's size — in **either dimension, columns and/or rows, together or
 separately** — keeps each cell's content in the **same visual position**. Today, shrinking (or
 growing) the grid can reflow content that the resize didn't visually touch, because content is
