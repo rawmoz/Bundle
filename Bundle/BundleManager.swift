@@ -208,6 +208,47 @@ final class BundleManager {
         clearCell(bundle, index)
     }
 
+    // Batch delete (⌘⌫ on a multi-selection, v0.14): trash every selected occupied cell's
+    // file and clear it, writing the manifest once at the end (same batching as v0.11
+    // paste). Returns whether anything was deleted. Empty cells in the selection are
+    // skipped; the selection is dropped afterward since those cells are now empty.
+    @discardableResult
+    func deleteSelectedContent(bundle: BundleState) -> Bool {
+        var deleted = false
+        for i in selection.selectedIndices(in: bundle.id)
+        where i < bundle.cells.count && !bundle.cells[i].isEmpty {
+            if let filename = bundle.cells[i].storedFilename {
+                store.removeContentFile(filename, bundleID: bundle.id)
+            }
+            bundle.cells[i].contentType = nil
+            bundle.cells[i].storedFilename = nil
+            bundle.cells[i].displayName = nil
+            deleted = true
+        }
+        if deleted {
+            save(bundle)
+            selection.clear()
+        }
+        return deleted
+    }
+
+    // Batch copy (⌘C on a multi-selection, v0.14): place every selected occupied cell's
+    // file URL on the clipboard, the symmetric partner of the v0.11 multi-file paste — copy
+    // N here, ⌘V spill-fills N elsewhere. Text cells contribute their backing .txt URL so
+    // the round-trip stays file-based (the single-cell ⌘C still copies text as a string).
+    @discardableResult
+    func copySelected(from bundle: BundleState) -> Bool {
+        let urls: [NSURL] = selection.selectedIndices(in: bundle.id).compactMap { i in
+            guard i < bundle.cells.count, let filename = bundle.cells[i].storedFilename else { return nil }
+            return store.contentFileURL(for: bundle.id, filename: filename) as NSURL
+        }
+        guard !urls.isEmpty else { return false }
+        let pb = NSPasteboard.general
+        pb.clearContents()
+        pb.writeObjects(urls)
+        return true
+    }
+
     // Drag-out completed: the file now lives at the drop destination, so this is a move —
     // permanently remove the bundle's now-redundant copy and empty the cell.
     func moveOutContent(bundle: BundleState, index: Int) {
@@ -428,14 +469,25 @@ final class BundleManager {
             let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
 
             if flags.contains(.command) {
-                // ⌘⌫ trashes an occupied cell's content (recoverable), like Finder.
-                if event.keyCode == 51, !bundle.cells[index].isEmpty {
-                    self.deleteContent(bundle: bundle, index: index)
-                    return nil
+                // With more than one cell selected, ⌘⌫ / ⌘C act on the whole set (v0.14);
+                // a single selection keeps the original per-cell behavior. ⌘V always pastes
+                // into the anchor cell (spill-fill takes over from there).
+                let multi = self.selection.selectedIndices(in: bundle.id).count > 1
+                // ⌘⌫ trashes occupied cells' content (recoverable), like Finder.
+                if event.keyCode == 51 {
+                    if multi { if self.deleteSelectedContent(bundle: bundle) { return nil } }
+                    else if !bundle.cells[index].isEmpty {
+                        self.deleteContent(bundle: bundle, index: index)
+                        return nil
+                    }
+                    return event
                 }
                 guard let key = event.charactersIgnoringModifiers?.lowercased() else { return event }
                 if key == "v", self.paste(into: bundle, index: index) { return nil }
-                if key == "c", self.copy(from: bundle, index: index) { return nil }
+                if key == "c" {
+                    if multi { if self.copySelected(from: bundle) { return nil } }
+                    else if self.copy(from: bundle, index: index) { return nil }
+                }
                 return event
             }
 

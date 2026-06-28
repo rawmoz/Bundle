@@ -120,6 +120,10 @@ struct BundleGridView: View {
                                     selection.select(bundleID: bundle.id, index: index)
                                     onActivate()   // make the panel key so ⌘V/⌘C reach it
                                 },
+                                onToggleSelect: {
+                                    selection.toggle(bundleID: bundle.id, index: index)
+                                    onActivate()   // keep the panel key for batch ⌘⌫/⌘C
+                                },
                                 onDropProviders: { onDropCell(index, $0) },
                                 onPaste: { onPasteCell(index) },
                                 onDelete: { onDeleteCell(index) },

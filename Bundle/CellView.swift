@@ -13,6 +13,7 @@ struct CellView: View {
     let index: Int       // so a drop onto another cell becomes a move/swap
 
     var onSelect: () -> Void
+    var onToggleSelect: () -> Void   // ⌘-click — add/remove this cell from the selection
     var onDropProviders: ([NSItemProvider]) -> Bool
     var onPaste: () -> Void
     var onDelete: () -> Void
@@ -54,7 +55,12 @@ struct CellView: View {
         // harmlessly runs onSelect() first, then onOpen() — same cell, no side effect.
         // This matches how native AppKit apps feel: act now, don't wait for a maybe-second-click.
         .onTapGesture(count: 2) { if !cell.isEmpty { onOpen() } }
-        .simultaneousGesture(TapGesture().onEnded { onSelect() })
+        // Plain click selects (resets to one cell); ⌘-click toggles this cell in/out of a
+        // multi-selection (v0.14), exactly like Finder. TapGesture carries no modifier
+        // flags, so we read the live keyboard state off NSEvent at click time.
+        .simultaneousGesture(TapGesture().onEnded {
+            if NSEvent.modifierFlags.contains(.command) { onToggleSelect() } else { onSelect() }
+        })
         .onDrop(of: [.bundleCell, .fileURL, .image, .text], isTargeted: $isTargeted) { onDropProviders($0) }
         .contextMenu {
             if cell.isEmpty {
