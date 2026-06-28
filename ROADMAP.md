@@ -583,6 +583,71 @@ empty ones, with no reflow of untouched content.
 
 ---
 
+## v0.14 — Multi-cell selection (⌘-click) — planned
+**Goal:** select multiple cells at once and run a single command on all of them — exactly
+like Finder, where ⌘-clicking files builds up a highlighted set you can then delete, drag,
+or copy together. Today selection is a **single** app-wide cell; this generalizes it to a
+set without inventing any new interaction (it's the standard macOS ⌘-click behavior, nothing
+bespoke).
+
+### Behavior
+- **⌘-click toggles a cell in/out of the selection.** Plain click still **resets** to a
+  single selection (clicking an unmodified cell clears the rest), matching Finder exactly.
+  ⌘-clicking an already-selected cell **deselects just that one**.
+- **Every selected cell draws the blue ring.** Selecting three cells makes all three blue;
+  there's no separate "active vs. selected" styling — the ring is the highlight, same as now.
+- **Clicking empty panel space / losing key focus clears the whole set** (the v0.4
+  deselect-on-focus-loss rule, generalized from one cell to the set).
+
+### Commands that pair with a multi-selection
+- **`⌘⌫` delete (the headline case)** — trashes every selected occupied cell's file
+  (recoverable). Loops the existing `deleteContent` over the set with **one batched save** at
+  the end (same batching pattern as v0.11 paste).
+- **Drag out** — drags the whole group to Finder / another app as multiple file promises
+  (one promise per occupied cell), consistent with the v0.5 drag-out machinery. (Still
+  Finder/Desktop-only while sandboxed — the v1.0 "ghost drag" limitation applies per file,
+  unchanged.)
+- **`⌘C` copy** — copies all selected files to the clipboard, the symmetric partner of the
+  v0.11 multi-file paste (copy N here → ⌘V spill-fills N there).
+
+### Single-cell-only commands (collapse to one cell, like Finder)
+- **Arrow-key navigation, spacebar Quick Look, rename, double-click open** stay single-cell
+  by nature. When a multi-selection is active these act on a single "anchor" cell (or are
+  ignored) rather than the set — Finder collapses these to the active item too, so it's
+  consistent, not a special case. Arrow keys reset the selection back to a single cell (the
+  moved ring), matching Finder's ⌘-click-then-arrow behavior.
+
+### Scope decision — single bundle for v1
+- **Selection is scoped to one bundle at a time.** ⌘-clicking a cell in a *different* bundle
+  starts a fresh selection there rather than spanning both. This keeps each command touching
+  a single manifest (delete/copy/drag stay within one bundle's folder), avoiding the
+  multi-manifest coordination a cross-bundle selection would need.
+- **Cross-bundle multi-selection is a deliberate follow-up** (noted in Future/TBD). It's the
+  more Finder-faithful behavior but meaningfully more work (delete/drag would fan out across
+  several bundle folders + manifests at once), so it's split off rather than bundled here.
+
+### Why it's additive, not a rewrite
+- **The state change is contained to `SelectionStore`** — it goes from a single
+  `(bundleID, index)` to a **set** of indices within the active bundle. The blue-ring check
+  in `CellView` becomes "is this index *in* the set" instead of "*is* the selected index".
+- **The keyDown monitor in `BundleManager` already resolves the selection first**, then
+  dispatches — so `⌘⌫`/`⌘C` change from acting on one resolved cell to iterating the set. The
+  arrow/space/rename branches read the anchor cell and are otherwise untouched.
+- No storage or manifest-format change — selection is **transient and never persisted**
+  (unchanged from v0.4), so nothing on disk is affected.
+
+**Files likely touched:** `SelectionStore` (single → set + anchor), `BundleManager` (keyDown
+monitor: loop delete/copy over the set, batched save; drag-out group promise), `CellView`
+(ring keyed on set membership + ⌘-click toggle vs. plain-click reset), `BundleGridView`
+(select-gesture wiring for the modifier).
+
+**Done when:** ⌘-clicking cells builds a multi-cell selection (all highlighted blue), a plain
+click resets to one, and `⌘⌫` / drag-out / `⌘C` apply to every selected cell at once within a
+bundle — with single-cell commands (arrows, Quick Look, rename, open) collapsing to the
+anchor cell as in Finder. Cross-bundle selection is deferred.
+
+---
+
 ## v1.1 — Custom storage location (idea, tied to v1.0 distribution)
 **Goal:** let the user choose *where* their bundles live — e.g. `~/Documents/Bundle`
 instead of the hidden sandbox container — so the files are reachable in a place of their
@@ -632,6 +697,10 @@ existing bundles migrate cleanly, and the default keeps current setups working u
 - Emoji in bundle names — the rename field's SwiftUI `.popover` is `.transient`, so the fn
   emoji picker (a separate window) steals focus and dismisses it. Fix needs a manually
   presented `NSPopover` with `.applicationDefined` behavior. Workaround today: paste an emoji.
+- Cross-bundle multi-selection — extend v0.14's ⌘-click multi-select to span more than one
+  bundle at once (delete/drag/copy fanning out across several bundle folders + manifests).
+  More Finder-faithful but needs multi-manifest coordination; deferred from v0.14, which is
+  single-bundle.
 - Context menu "More" items
 - Horizontal grid orientation toggle
 - iCloud sync across Macs
